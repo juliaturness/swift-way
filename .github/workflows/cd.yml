@@ -1,4 +1,4 @@
-name: CD Pipeline - VAPT VUPT
+name: CD Pipeline - SWIFT WAY
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: julinhatubaraoo/vapt-vupt-backend:latest, julinhatubaraoo/vapt-vupt-backend:${{ github.sha }}
+          tags: julinhatubaraoo/swift-way-backend:latest, julinhatubaraoo/swift-way-backend:${{ github.sha }}
 
   deploy-staging:
     name: Deploy em Staging
