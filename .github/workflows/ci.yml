@@ -1,4 +1,4 @@
-name: CI Pipeline - VAPT VUPT
+name: CI Pipeline - SWIFT WAY
 
 on:
   pull_request:
