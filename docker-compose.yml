@@ -3,10 +3,10 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: vapt_vupt_db
+    container_name: swift_way_db
     restart: always
     environment:
-      POSTGRES_DB: ${DB_NAME:-vapt_vupt}
+      POSTGRES_DB: ${DB_NAME:-swift_way}
       POSTGRES_USER: ${DB_USER:-root}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
@@ -16,18 +16,18 @@ services:
 
   redis:
     image: redis:alpine
-    container_name: vapt_vupt_cache
+    container_name: swift_way_cache
     restart: always
     ports:
       - "6379:6379"
 
   backend:
     build: ./backend
-    container_name: vapt_vupt_backend
+    container_name: swift_way_backend
     restart: always
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-vapt_vupt}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-swift_way}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-root}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-password}
       SPRING_DATA_REDIS_HOST: redis
@@ -39,7 +39,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: vapt_vupt_frontend
+    container_name: swift_way_frontend
     restart: always
     depends_on:
       - backend
