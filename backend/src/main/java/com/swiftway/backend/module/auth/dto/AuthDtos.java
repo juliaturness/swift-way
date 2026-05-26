@@ -1,6 +1,7 @@
 package com.swiftway.backend.module.auth.dto;
 
 import com.swiftway.backend.module.auth.domain.UserRole;
+import com.swiftway.backend.shared.validation.ValidCNPJ;
 import com.swiftway.backend.shared.validation.ValidCPF;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -19,12 +20,18 @@ public final class AuthDtos {
         @NotBlank String password,
         @NotNull UserRole role,
 
+        // DRIVER
         String fullName,
         String cpf,
         String phone,
         String cnhNumber,
         String cnhCategory,
-        LocalDate cnhValidity
+        LocalDate cnhValidity,
+
+        // CARRIER
+        String cnpj,
+        String razaoSocial,
+        String nomeFantasia
     ) {}
 
 

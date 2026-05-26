@@ -29,7 +29,9 @@ public final class DriverDtos {
         String cnhNumber,
 
         @Size(max = 5, message = "Categoria da CNH deve ter no máximo 5 caracteres")
-        String cnhCategory
+        String cnhCategory,
+
+        LocalDate cnhValidity
     ) {}
 
     public record UpdateAvailabilityRequest(
