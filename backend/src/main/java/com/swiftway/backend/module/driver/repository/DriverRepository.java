@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,4 +29,27 @@ public interface DriverRepository extends JpaRepository<Driver, UUID> {
     /** Lista todos os motoristas com paginação (admin). */
     @Query("SELECT d FROM Driver d JOIN FETCH d.user u")
     Page<Driver> findAllWithUser(Pageable pageable);
+
+    // Adicionar estas queries ao DriverRepository existente:
+
+    @Query("""
+    SELECT d FROM Driver d
+    JOIN FETCH d.user
+    WHERE d.available = true
+      AND d.deletedAt IS NULL
+      AND d.latitude IS NOT NULL
+      AND d.longitude IS NOT NULL
+    """)
+    List<Driver> findDisponiveis();
+
+    @Query("""
+    SELECT d FROM Driver d
+    JOIN FETCH d.user
+    WHERE d.available  = true
+      AND d.grApproved  = true
+      AND d.deletedAt   IS NULL
+      AND d.latitude    IS NOT NULL
+      AND d.longitude   IS NOT NULL
+    """)
+    List<Driver> findDisponiveisAprovadosGr();
 }

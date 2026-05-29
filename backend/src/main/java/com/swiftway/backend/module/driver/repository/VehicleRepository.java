@@ -24,4 +24,16 @@ public interface VehicleRepository extends JpaRepository<Vehicle, UUID> {
     @Modifying
     @Query(value = "UPDATE vehicles SET ativo = false WHERE id = :id AND driver_id = :driverId", nativeQuery = true)
     void deactivateVehicle(@Param("id") UUID id, @Param("driverId") UUID driverId);
+
+    @Query("""
+    SELECT v FROM Vehicle v
+    WHERE v.driver.id     = :driverId
+      AND v.vehicleTypeId = :vehicleTypeId
+      AND v.active        = true
+    ORDER BY v.createdAt DESC
+    """)
+    Optional<Vehicle> findFirstActiveByDriverAndVehicleType(
+        @Param("driverId")       UUID driverId,
+        @Param("vehicleTypeId")  Short vehicleTypeId
+    );
 }
