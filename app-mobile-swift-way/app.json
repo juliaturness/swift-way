@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "VAPT VUPT",
+    "slug": "vapt-vupt-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A1929"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vaptvupt.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Precisamos da sua localização para mostrar cargas próximas e atualizar sua posição.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Precisamos da sua localização em segundo plano para rastrear suas entregas.",
+        "NSCameraUsageDescription": "Precisamos da câmera para digitalizar documentos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A1929"
+      },
+      "package": "com.vaptvupt.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permitir que VAPT VUPT use sua localização para rastreamento de entregas."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir que VAPT VUPT acesse sua câmera para digitalizar documentos."
+        }
+      ]
+    ]
+  }
+}
