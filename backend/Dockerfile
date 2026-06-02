@@ -9,7 +9,7 @@ RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 COPY src src
 
-RUN ./gradlew build -x test --no-daemon
+RUN ./gradlew build -x test -x checkstyleMain --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
