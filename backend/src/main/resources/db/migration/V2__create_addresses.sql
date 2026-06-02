@@ -9,7 +9,7 @@
 
 CREATE TYPE address_type AS ENUM ('SEDE', 'FILIAL', 'OPERACIONAL');
 
-CREATE TABLE addresses (
+CREATE TABLE IF NOT EXISTS addresses (
    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
    carrier_id  UUID         NOT NULL
        REFERENCES carrier_profiles (id) ON DELETE CASCADE,
@@ -28,7 +28,7 @@ CREATE TABLE addresses (
 CREATE INDEX idx_addresses_carrier_id ON addresses (carrier_id);
 CREATE INDEX idx_addresses_type       ON addresses (type);
 
-COMMENT ON TABLE  addresses           IS 'Endereços vinculados a uma transportadora (sede, filiais, pontos operacionais).';
+COMMENT ON TABLE addresses           IS 'Endereços vinculados a uma transportadora (sede, filiais, pontos operacionais).';
 COMMENT ON COLUMN addresses.estado    IS 'Sigla da UF com 2 caracteres, ex: SC.';
 COMMENT ON COLUMN addresses.cep       IS 'CEP sem hífen — somente os 8 dígitos.';
 COMMENT ON COLUMN addresses.type      IS 'SEDE = endereço principal; FILIAL = unidade secundária; OPERACIONAL = ponto de coleta/entrega.';

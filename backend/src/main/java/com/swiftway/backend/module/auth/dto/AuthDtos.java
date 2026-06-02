@@ -1,28 +1,39 @@
 package com.swiftway.backend.module.auth.dto;
 
-
 import com.swiftway.backend.module.auth.domain.UserRole;
+import com.swiftway.backend.shared.validation.ValidCNPJ;
+import com.swiftway.backend.shared.validation.ValidCPF;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.LocalDate;
+
 public final class AuthDtos {
 
     private AuthDtos() {}
 
+    // Registro Genérico
     public record RegisterRequest(
-        @Email(message = "E-mail inválido")
-        @NotBlank
-        String email,
+        @NotBlank @Email String email,
+        @NotBlank String password,
+        @NotNull UserRole role,
 
-        @NotBlank
-        @Size(min = 8, message = "Senha deve ter ao menos 8 caracteres")
-        String password,
+        // DRIVER
+        String fullName,
+        String cpf,
+        String phone,
+        String cnhNumber,
+        String cnhCategory,
+        LocalDate cnhValidity,
 
-        @NotNull
-        UserRole role
+        // CARRIER
+        String cnpj,
+        String razaoSocial,
+        String nomeFantasia
     ) {}
+
 
     public record LoginRequest(
         @Email @NotBlank String email,
@@ -48,4 +59,3 @@ public final class AuthDtos {
         @NotBlank String refreshToken
     ) {}
 }
-

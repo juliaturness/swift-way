@@ -22,7 +22,7 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Registra um novo usuário (DRIVER, CARRIER ou ADMIN)")
+    @Operation(summary = "Registra um novo usuário")
     public TokenResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }

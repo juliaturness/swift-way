@@ -31,7 +31,12 @@ public class JwtService {
     }
 
     public String generateAccessToken(UserDetails userDetails) {
-        return buildToken(Map.of(), userDetails, accessTokenTtlSeconds);
+        var authorities = userDetails.getAuthorities().stream()
+            .map(auth -> auth.getAuthority())
+            .toList();
+
+        log.info("Generating token with roles: {}", authorities);
+        return buildToken(Map.of("roles", authorities), userDetails, accessTokenTtlSeconds);
     }
 
     private String buildToken(Map<String, Object> extraClaims,
