@@ -8,8 +8,9 @@ COPY build.gradle settings.gradle ./
 RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 COPY src src
+COPY config config 
 
-RUN ./gradlew build -x test -x checkstyleMain --no-daemon
+RUN ./gradlew build -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
