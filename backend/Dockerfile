@@ -8,7 +8,6 @@ COPY build.gradle settings.gradle ./
 RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 COPY src src
-COPY config config 
 
 RUN ./gradlew build -x test --no-daemon
 
