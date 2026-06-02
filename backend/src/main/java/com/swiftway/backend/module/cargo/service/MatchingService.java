@@ -58,29 +58,50 @@ public class MatchingService {
             ? driverRepository.findDisponiveisAprovadosGr()
             : driverRepository.findDisponiveis();
 
+        log.info("Candidates from DB: {}", candidates.size());
+
         List<CargoMatch> matches = new ArrayList<>();
 
         for (Driver driver : candidates) {
+            log.info("Checking driver={}", driver.getId());
+
             // Pula motoristas sem localização cadastrada
-            if (driver.getLatitude() == null || driver.getLongitude() == null) continue;
+            if (driver.getLatitude() == null || driver.getLongitude() == null) {
+                log.warn("CUT: no location");
+                continue;
+            }
+
 
             double distKm = haversineKm(
                 driver.getLatitude().doubleValue(),
                 driver.getLongitude().doubleValue(),
                 cargo.getOrigemCidade()   // lat/lng da origem seria ideal — aqui simplificado
             );
+            log.info("distKm={} raioMaxKm={}", distKm, raioMaxKm);
 
-            if (distKm > raioMaxKm) continue;
+
+            if (distKm > raioMaxKm) {
+                log.warn("CUT: distance");
+                continue;
+            }
 
             // Busca veículo compatível com o tipo exigido pela carga
             Vehicle vehicle = vehicleRepository
                 .findFirstActiveByDriverAndVehicleType(driver.getId(), cargo.getVehicleTypeId())
                 .orElse(null);
+            log.info("vehicle={}", vehicle != null ? vehicle.getId() : "NULL");
 
-            if (vehicle == null) continue;
+
+            if (vehicle == null) {
+                log.warn("CUT: no vehicle typeId={}", cargo.getVehicleTypeId());
+                continue;
+            }
 
             // Valida rastreador quando carga exige
-            if (cargo.isRequerRastreador() && !vehicle.isHasTracker()) continue;
+            if (cargo.isRequerRastreador() && !vehicle.isHasTracker()){
+                log.warn("CUT: no tracker");
+            continue;
+        }
 
             // Evita duplicata no log de matching (constraint uq_cargo_match)
             if (cargoMatchRepository.existsByCargoIdAndDriverId(cargo.getId(), driver.getId())) {

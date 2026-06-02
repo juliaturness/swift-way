@@ -22,4 +22,21 @@ public interface CargoMatchRepository extends JpaRepository<CargoMatch, UUID> {
     List<CargoMatch> findByDriverId(UUID driverId);
 
     boolean existsByCargoIdAndDriverId(UUID cargoId, UUID driverId);
+
+    /** Used by OfferService when creating offers — returns matches ordered by score. */
+    List<CargoMatch> findByCargoIdOrderByScoreDesc(UUID cargoId);
+
+    /**
+     * Returns true if at least one offer for this cargo is still in an open state
+     * (ENVIADA or ACEITA). Used to decide whether to revert the cargo to AGUARDANDO.
+     */
+    @Query("""
+        SELECT COUNT(o) > 0 FROM Offer o
+        WHERE o.cargo.id = :cargoId
+          AND o.status IN (
+              com.swiftway.backend.module.cargo.domain.enums.OfferStatus.ENVIADA,
+              com.swiftway.backend.module.cargo.domain.enums.OfferStatus.ACEITA
+          )
+        """)
+    boolean existsOpenOfferForCargo(@Param("cargoId") UUID cargoId);
 }
