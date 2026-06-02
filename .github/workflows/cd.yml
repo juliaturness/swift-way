@@ -25,20 +25,3 @@ jobs:
           push: true
           tags: julinhatubaraoo/swift-way-backend:latest, julinhatubaraoo/swift-way-backend:${{ github.sha }}
 
-  deploy-staging:
-    name: Deploy em Staging
-    needs: build-and-push-docker
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - name: Trigger Deploy Staging
-        run: echo "Substitua este passo pelo script de deploy no seu servidor de Staging"
-
-  deploy-production:
-    name: Deploy em Produção
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production # É isso que ativa a APROVAÇÃO MANUAL no GitHub
-    steps:
-      - name: Trigger Deploy Production
-        run: echo "Substitua este passo pelo script de deploy no seu servidor de Produção"
