@@ -1,281 +1,175 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useReducer,
+} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthState, Driver, DriverStatus } from '../types';
+import { authApi, RegisterRequest } from '../lib/api';
 
-// Chaves do AsyncStorage
-const AUTH_TOKEN_KEY = '@vapt_vupt:auth_token';
-const USER_DATA_KEY = '@vapt_vupt:user_data';
+// ── storage keys ──────────────────────────────────────────────────────────────
 
-// Motorista mock para demonstração
-const mockDriver: Driver = {
-  id: '1',
-  name: 'João Silva',
-  email: 'joao.silva@email.com',
-  phone: '(48) 99999-8888',
-  cpf: '123.456.789-00',
-  birthDate: '15/03/1985',
-  address: 'Rua das Palmeiras, 567',
-  city: 'Florianópolis',
-  state: 'SC',
-  zipCode: '88010-000',
-  userType: 'driver',
-  createdAt: '2024-01-10',
-  cnhNumber: '12345678900',
-  cnhCategory: 'E',
-  cnhExpiry: '15/08/2028',
-  status: 'available',
-  rating: 4.8,
-  totalTrips: 87,
-  approvalRate: 98,
-  monthlyEarnings: 12400,
-  vehicles: [
-    {
-      id: '1',
-      type: 'Caminhão Baú',
-      plate: 'ABC-1234',
-      year: '2020',
-      model: 'VW Delivery',
-      brand: 'Volkswagen',
-      status: 'active',
-    },
-    {
-      id: '2',
-      type: 'Van',
-      plate: 'XYZ-5678',
-      year: '2019',
-      model: 'Sprinter',
-      brand: 'Mercedes-Benz',
-      status: 'maintenance',
-    },
-  ],
-};
+const KEY_ACCESS  = '@access_token';
+const KEY_REFRESH = '@refresh_token';
+const KEY_USER    = '@user';
 
-// Estado inicial
-const initialState: AuthState = {
-  isAuthenticated: false,
-  isLoading: true,
-  user: null,
-  token: null,
-};
+// ── tipos ─────────────────────────────────────────────────────────────────────
 
-// Tipos de ação
-type AuthAction =
-  | { type: 'AUTH_LOADING' }
-  | { type: 'AUTH_SUCCESS'; payload: { user: Driver; token: string } }
-  | { type: 'AUTH_FAILURE' }
+export interface AuthUser {
+  email: string;
+  role: 'DRIVER' | 'CARRIER';
+}
+
+interface AuthState {
+  user: AuthUser | null;
+  accessToken: string | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+}
+
+type Action =
+  | { type: 'LOADING' }
+  | { type: 'LOGIN_SUCCESS'; user: AuthUser; accessToken: string }
   | { type: 'LOGOUT' }
-  | { type: 'UPDATE_USER'; payload: Partial<Driver> }
-  | { type: 'UPDATE_STATUS'; payload: DriverStatus };
+  | { type: 'ERROR' };
 
-// Reducer
-function authReducer(state: AuthState, action: AuthAction): AuthState {
+function reducer(state: AuthState, action: Action): AuthState {
   switch (action.type) {
-    case 'AUTH_LOADING':
+    case 'LOADING':
       return { ...state, isLoading: true };
-    case 'AUTH_SUCCESS':
+    case 'LOGIN_SUCCESS':
       return {
-        ...state,
+        user: action.user,
+        accessToken: action.accessToken,
+        isLoading: false,
         isAuthenticated: true,
-        isLoading: false,
-        user: action.payload.user,
-        token: action.payload.token,
-      };
-    case 'AUTH_FAILURE':
-      return {
-        ...state,
-        isAuthenticated: false,
-        isLoading: false,
-        user: null,
-        token: null,
       };
     case 'LOGOUT':
-      return {
-        ...state,
-        isAuthenticated: false,
-        isLoading: false,
-        user: null,
-        token: null,
-      };
-    case 'UPDATE_USER':
-      return {
-        ...state,
-        user: state.user ? { ...state.user, ...action.payload } : null,
-      };
-    case 'UPDATE_STATUS':
-      return {
-        ...state,
-        user: state.user ? { ...state.user, status: action.payload } : null,
-      };
+      return { user: null, accessToken: null, isLoading: false, isAuthenticated: false };
+    case 'ERROR':
+      return { ...state, isLoading: false };
     default:
       return state;
   }
 }
 
-// Tipo do contexto
-interface AuthContextType {
+// ── contexto ──────────────────────────────────────────────────────────────────
+
+interface AuthContextValue {
   state: AuthState;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (data: Partial<Driver>) => Promise<boolean>;
+  register: (data: RegisterRequest) => Promise<boolean>;
   logout: () => Promise<void>;
-  updateUser: (data: Partial<Driver>) => void;
-  updateStatus: (status: DriverStatus) => Promise<void>;
-  checkAuth: () => Promise<void>;
 }
 
-// Criar contexto
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Provider
-interface AuthProviderProps {
-  children: ReactNode;
-}
+// ── provider ──────────────────────────────────────────────────────────────────
 
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, {
+    user: null,
+    accessToken: null,
+    isLoading: true,   // começa carregando até ler o storage
+    isAuthenticated: false,
+  });
 
-  // Verificar autenticação ao iniciar
+  // Restaura sessão ao abrir o app
   useEffect(() => {
-    checkAuth();
+    (async () => {
+      try {
+        const [token, userJson] = await AsyncStorage.multiGet([KEY_ACCESS, KEY_USER]);
+        const accessToken = token[1];
+        const user: AuthUser | null = userJson[1] ? JSON.parse(userJson[1]) : null;
+
+        if (accessToken && user) {
+          dispatch({ type: 'LOGIN_SUCCESS', user, accessToken });
+        } else {
+          dispatch({ type: 'LOGOUT' });
+        }
+      } catch {
+        dispatch({ type: 'LOGOUT' });
+      }
+    })();
   }, []);
 
-  // Verificar se existe sessão salva
-  const checkAuth = async () => {
-    try {
-      dispatch({ type: 'AUTH_LOADING' });
-      
-      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-      const userData = await AsyncStorage.getItem(USER_DATA_KEY);
-      
-      if (token && userData) {
-        const user = JSON.parse(userData) as Driver;
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user, token } });
-      } else {
-        dispatch({ type: 'AUTH_FAILURE' });
-      }
-    } catch (error) {
-      console.error('Erro ao verificar autenticação:', error);
-      dispatch({ type: 'AUTH_FAILURE' });
-    }
-  };
+  // ── login ──────────────────────────────────────────────────────────────────
 
-  // Login
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    dispatch({ type: 'LOADING' });
     try {
-      dispatch({ type: 'AUTH_LOADING' });
-      
-      // Simular chamada API
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      // Em produção, aqui seria feita a chamada real à API
-      // Por enquanto, aceita qualquer email/senha e retorna o mock
-      if (email && password) {
-        const token = 'mock_jwt_token_' + Date.now();
-        const user = { ...mockDriver, email };
-        
-        // Salvar no AsyncStorage
-        await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-        await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
-        
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user, token } });
-        return true;
-      }
-      
-      dispatch({ type: 'AUTH_FAILURE' });
-      return false;
-    } catch (error) {
-      console.error('Erro no login:', error);
-      dispatch({ type: 'AUTH_FAILURE' });
-      return false;
-    }
-  };
+      const tokens = await authApi.login({ email, password });
 
-  // Registro
-  const register = async (data: Partial<Driver>): Promise<boolean> => {
-    try {
-      dispatch({ type: 'AUTH_LOADING' });
-      
-      // Simular chamada API
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      
-      const token = 'mock_jwt_token_' + Date.now();
-      const user: Driver = {
-        ...mockDriver,
-        ...data,
-        id: String(Date.now()),
-        createdAt: new Date().toISOString(),
-      };
-      
-      // Salvar no AsyncStorage
-      await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
-      
-      dispatch({ type: 'AUTH_SUCCESS', payload: { user, token } });
+      // O JWT não traz role no body — guardamos só o email por ora.
+      // Se precisar do role, decodifique o JWT (lib: jwt-decode) ou adicione
+      // um endpoint /me no backend.
+      const user: AuthUser = { email, role: 'DRIVER' }; // ajuste conforme seu /me
+
+      await AsyncStorage.multiSet([
+        [KEY_ACCESS,  tokens.accessToken],
+        [KEY_REFRESH, tokens.refreshToken],
+        [KEY_USER,    JSON.stringify(user)],
+      ]);
+
+      dispatch({ type: 'LOGIN_SUCCESS', user, accessToken: tokens.accessToken });
       return true;
-    } catch (error) {
-      console.error('Erro no registro:', error);
-      dispatch({ type: 'AUTH_FAILURE' });
+    } catch (err) {
+      console.error('[Auth] login error:', err);
+      dispatch({ type: 'ERROR' });
       return false;
     }
-  };
+  }, []);
 
-  // Logout
-  const logout = async () => {
+  // ── register ───────────────────────────────────────────────────────────────
+
+  const register = useCallback(async (data: RegisterRequest): Promise<boolean> => {
+    dispatch({ type: 'LOADING' });
     try {
-      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-      await AsyncStorage.removeItem(USER_DATA_KEY);
+      const tokens = await authApi.register(data);
+
+      const user: AuthUser = { email: data.email, role: data.role };
+
+      await AsyncStorage.multiSet([
+        [KEY_ACCESS,  tokens.accessToken],
+        [KEY_REFRESH, tokens.refreshToken],
+        [KEY_USER,    JSON.stringify(user)],
+      ]);
+
+      dispatch({ type: 'LOGIN_SUCCESS', user, accessToken: tokens.accessToken });
+      return true;
+    } catch (err) {
+      console.error('[Auth] register error:', err);
+      dispatch({ type: 'ERROR' });
+      return false;
+    }
+  }, []);
+
+  // ── logout ─────────────────────────────────────────────────────────────────
+
+  const logout = useCallback(async () => {
+    try {
+      const refreshToken = await AsyncStorage.getItem(KEY_REFRESH);
+      if (refreshToken) await authApi.logout({ refreshToken });
+    } catch {
+      // ignora erro de rede no logout
+    } finally {
+      await AsyncStorage.multiRemove([KEY_ACCESS, KEY_REFRESH, KEY_USER]);
       dispatch({ type: 'LOGOUT' });
-    } catch (error) {
-      console.error('Erro no logout:', error);
     }
-  };
-
-  // Atualizar dados do usuário
-  const updateUser = (data: Partial<Driver>) => {
-    dispatch({ type: 'UPDATE_USER', payload: data });
-    
-    // Atualizar no AsyncStorage
-    if (state.user) {
-      const updatedUser = { ...state.user, ...data };
-      AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(updatedUser));
-    }
-  };
-
-  // Atualizar status de disponibilidade
-  const updateStatus = async (status: DriverStatus) => {
-    dispatch({ type: 'UPDATE_STATUS', payload: status });
-    
-    // Atualizar no AsyncStorage
-    if (state.user) {
-      const updatedUser = { ...state.user, status };
-      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(updatedUser));
-    }
-    
-    // Em produção, enviar para API
-    // await api.updateDriverStatus(status);
-  };
+  }, []);
 
   return (
-    <AuthContext.Provider
-      value={{
-        state,
-        login,
-        register,
-        logout,
-        updateUser,
-        updateStatus,
-        checkAuth,
-      }}
-    >
+    <AuthContext.Provider value={{ state, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Hook personalizado
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+// ── hook ──────────────────────────────────────────────────────────────────────
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth deve ser usado dentro de <AuthProvider>');
+  return ctx;
 }

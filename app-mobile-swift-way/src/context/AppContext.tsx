@@ -1,29 +1,24 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import NetInfo from '@react-native-community/netinfo';
 import { AppState } from '../types';
 
-// Estado inicial
 const initialState: AppState = {
   isLoading: false,
-  isOnline: true,
-  theme: 'dark',
+  isOnline:  true,
+  theme:     'dark',
 };
 
-// Tipos de ação
 type AppAction =
   | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_ONLINE'; payload: boolean }
-  | { type: 'SET_THEME'; payload: 'light' | 'dark' }
+  | { type: 'SET_ONLINE';  payload: boolean }
+  | { type: 'SET_THEME';   payload: 'light' | 'dark' }
   | { type: 'TOGGLE_THEME' };
 
-// Reducer
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case 'SET_LOADING':
-      return { ...state, isLoading: action.payload };
-    case 'SET_ONLINE':
-      return { ...state, isOnline: action.payload };
-    case 'SET_THEME':
-      return { ...state, theme: action.payload };
+    case 'SET_LOADING': return { ...state, isLoading: action.payload };
+    case 'SET_ONLINE':  return { ...state, isOnline:  action.payload };
+    case 'SET_THEME':   return { ...state, theme:     action.payload };
     case 'TOGGLE_THEME':
       return { ...state, theme: state.theme === 'dark' ? 'light' : 'dark' };
     default:
@@ -31,62 +26,41 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-// Tipo do contexto
 interface AppContextType {
-  state: AppState;
-  setLoading: (loading: boolean) => void;
-  setOnline: (online: boolean) => void;
-  setTheme: (theme: 'light' | 'dark') => void;
+  state:       AppState;
+  setLoading:  (v: boolean) => void;
+  setOnline:   (v: boolean) => void;
+  setTheme:    (v: 'light' | 'dark') => void;
   toggleTheme: () => void;
 }
 
-// Criar contexto
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Provider
-interface AppProviderProps {
-  children: ReactNode;
-}
-
-export function AppProvider({ children }: AppProviderProps) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
-  const setLoading = (loading: boolean) => {
-    dispatch({ type: 'SET_LOADING', payload: loading });
-  };
+  // Monitora conectividade real do dispositivo
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(netState => {
+      dispatch({ type: 'SET_ONLINE', payload: netState.isConnected ?? true });
+    });
+    return unsubscribe;
+  }, []);
 
-  const setOnline = (online: boolean) => {
-    dispatch({ type: 'SET_ONLINE', payload: online });
-  };
-
-  const setTheme = (theme: 'light' | 'dark') => {
-    dispatch({ type: 'SET_THEME', payload: theme });
-  };
-
-  const toggleTheme = () => {
-    dispatch({ type: 'TOGGLE_THEME' });
-  };
+  const setLoading  = (v: boolean)             => dispatch({ type: 'SET_LOADING', payload: v });
+  const setOnline   = (v: boolean)             => dispatch({ type: 'SET_ONLINE',  payload: v });
+  const setTheme    = (v: 'light' | 'dark')    => dispatch({ type: 'SET_THEME',   payload: v });
+  const toggleTheme = ()                        => dispatch({ type: 'TOGGLE_THEME' });
 
   return (
-    <AppContext.Provider
-      value={{
-        state,
-        setLoading,
-        setOnline,
-        setTheme,
-        toggleTheme,
-      }}
-    >
+    <AppContext.Provider value={{ state, setLoading, setOnline, setTheme, toggleTheme }}>
       {children}
     </AppContext.Provider>
   );
 }
 
-// Hook personalizado
 export function useApp() {
-  const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
-  return context;
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be used within an AppProvider');
+  return ctx;
 }

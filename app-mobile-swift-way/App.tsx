@@ -13,8 +13,8 @@ export default function App() {
       <SafeAreaProvider>
         <AppProvider>
           <AuthProvider>
-            <LocationProvider>
               <StatusBar style="light" />
+            <LocationProvider>
               <RootNavigator />
             </LocationProvider>
           </AuthProvider>

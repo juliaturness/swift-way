@@ -8,22 +8,29 @@ import { Button } from '../../components/ui/Button';
 import { colors, typography, spacing, borderRadius, iconSizes } from '../../theme';
 import { RootStackParamList } from '../../types';
 
+// pegando o tamanho exato da tela do celular.
 const { width, height } = Dimensions.get('window');
 
+// definindo como a tela vai navegar pra outras partes do aplicativo.
 type WelcomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Welcome'>;
 };
 
+// rotina principal q desenha a tela de boas-vindas.
 export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
+  // listinha com as principais vantagens q o aplicativo oferece.
   const features = [
     { icon: MapPin, text: 'Cargas em todo Brasil' },
     { icon: Shield, text: 'Pagamentos seguros' },
     { icon: Zap, text: 'Match inteligente' },
   ];
 
+  // a parte visual q realmente aparece pro usuário no celular.
   return (
     <LinearGradient colors={colors.gradientDark} style={styles.container}>
-      {/* Background Pattern */}
+      {
+        // desenhando bolinhas espalhadas aleatoriamente pelo fundo pra enfeitar.
+      }
       <View style={styles.backgroundPattern}>
         {[...Array(6)].map((_, i) => (
           <View
@@ -42,21 +49,22 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
         ))}
       </View>
 
-      {/* Logo Section */}
+      {
+        // espaço onde fica o símbolo do caminhão e o nome do aplicativo.
+      }
       <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.logoSection}>
         <View style={styles.logoContainer}>
-          <LinearGradient
-            colors={colors.gradientPrimary}
-            style={styles.logoWrapper}
-          >
+          <LinearGradient colors={colors.gradientPrimary} style={styles.logoWrapper}>
             <Truck size={iconSizes.huge} color={colors.text} />
           </LinearGradient>
         </View>
-        <Text style={styles.title}>VAPT VUPT</Text>
-        <Text style={styles.subtitle}>Sistema Logistico Inteligente</Text>
+        <Text style={styles.title}>SWIFT WAY</Text>
+        <Text style={styles.subtitle}>Sistema Logístico Inteligente</Text>
       </Animated.View>
 
-      {/* Features Section */}
+      {
+        // área q mostra as vantagens de usar o aplicativo.
+      }
       <Animated.View entering={FadeInUp.delay(400).duration(600)} style={styles.featuresSection}>
         <Text style={styles.featuresTitle}>Conectando motoristas e transportadoras</Text>
         <View style={styles.featuresList}>
@@ -75,7 +83,9 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
         </View>
       </Animated.View>
 
-      {/* Stats Section */}
+      {
+        // quadro com os números e resultados do aplicativo.
+      }
       <Animated.View entering={FadeInUp.delay(700).duration(600)} style={styles.statsSection}>
         <View style={styles.statItem}>
           <Text style={styles.statValue}>2.5k+</Text>
@@ -93,7 +103,9 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
         </View>
       </Animated.View>
 
-      {/* Actions Section */}
+      {
+        // botões grandes pra pessoa entrar ou criar uma conta nova.
+      }
       <Animated.View entering={FadeInUp.delay(900).duration(600)} style={styles.actionsSection}>
         <Button
           title="Entrar"
@@ -111,15 +123,16 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
           onPress={() => navigation.navigate('Register')}
         />
         <Text style={styles.termsText}>
-          Ao continuar, voce concorda com nossos{' '}
-          <Text style={styles.termsLink}>Termos de Servico</Text> e{' '}
-          <Text style={styles.termsLink}>Politica de Privacidade</Text>
+          Ao continuar, você concorda com nossos{' '}
+          <Text style={styles.termsLink}>Termos de Serviço</Text> e{' '}
+          <Text style={styles.termsLink}>Política de Privacidade</Text>
         </Text>
       </Animated.View>
     </LinearGradient>
   );
 }
 
+// dicionário de enfeites q decide a cor, tamanho e posição de tudo na tela.
 const styles = StyleSheet.create({
   container: {
     flex: 1,

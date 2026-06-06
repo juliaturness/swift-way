@@ -2,66 +2,66 @@ import { Dimensions, Platform } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-// Cores do tema - inspirado no design web VAPT VUPT
+// Cores do tema - inspirado no design web SWIFT WAY
 export const colors = {
   // Cores primárias
-  primary: '#3B82F6', // Azul principal
-  primaryDark: '#2563EB',
-  primaryLight: '#60A5FA',
+  primary: '#3B82F6' as const, // Azul principal
+  primaryDark: '#2563EB' as const,
+  primaryLight: '#60A5FA' as const,
   
   // Cores de fundo (tema escuro)
-  background: '#0A1929',
-  backgroundSecondary: '#0F2744',
-  card: '#132F4C',
-  cardHover: '#1A3A5C',
+  background: '#0A1929' as const,
+  backgroundSecondary: '#0F2744' as const,
+  card: '#132F4C' as const,
+  cardHover: '#1A3A5C' as const,
   
   // Cores de texto
-  text: '#FFFFFF',
-  textSecondary: '#B2BAC2',
-  textMuted: '#6B7A90',
+  text: '#FFFFFF' as const,
+  textSecondary: '#B2BAC2' as const,
+  textMuted: '#6B7A90' as const,
   
   // Cores de borda
-  border: '#1E4976',
-  borderLight: '#2D5A8A',
+  border: '#1E4976' as const,
+  borderLight: '#2D5A8A' as const,
   
   // Cores de status
-  success: '#22C55E',
-  successLight: '#4ADE80',
-  successBg: 'rgba(34, 197, 94, 0.1)',
+  success: '#22C55E' as const,
+  successLight: '#4ADE80' as const,
+  successBg: 'rgba(34, 197, 94, 0.1)' as const,
   
-  warning: '#F97316',
-  warningLight: '#FB923C',
-  warningBg: 'rgba(249, 115, 22, 0.1)',
+  warning: '#F97316' as const,
+  warningLight: '#FB923C' as const,
+  warningBg: 'rgba(249, 115, 22, 0.1)' as const,
   
-  error: '#EF4444',
-  errorLight: '#F87171',
-  errorBg: 'rgba(239, 68, 68, 0.1)',
+  error: '#EF4444' as const,
+  errorLight: '#F87171' as const,
+  errorBg: 'rgba(239, 68, 68, 0.1)' as const,
   
-  info: '#3B82F6',
-  infoLight: '#60A5FA',
-  infoBg: 'rgba(59, 130, 246, 0.1)',
+  info: '#3B82F6' as const,
+  infoLight: '#60A5FA' as const,
+  infoBg: 'rgba(59, 130, 246, 0.1)' as const,
   
   // Cores especiais
-  purple: '#A855F7',
-  purpleBg: 'rgba(168, 85, 247, 0.1)',
+  purple: '#A855F7' as const,
+  purpleBg: 'rgba(168, 85, 247, 0.1)' as const,
   
   // Cores para match score
-  matchHigh: '#22C55E',
-  matchMedium: '#F97316',
-  matchLow: '#EF4444',
+  matchHigh: '#22C55E' as const,
+  matchMedium: '#F97316' as const,
+  matchLow: '#EF4444' as const,
   
   // Input
-  inputBackground: '#132F4C',
-  inputBorder: '#1E4976',
-  inputFocus: '#3B82F6',
+  inputBackground: '#132F4C' as const,
+  inputBorder: '#1E4976' as const,
+  inputFocus: '#3B82F6' as const,
   
   // Overlay
-  overlay: 'rgba(0, 0, 0, 0.5)',
+  overlay: 'rgba(0, 0, 0, 0.5)' as const,
   
   // Gradientes (como arrays para LinearGradient)
-  gradientPrimary: ['#3B82F6', '#2563EB'],
-  gradientDark: ['#0A1929', '#132F4C'],
-  gradientCard: ['#132F4C', '#0F2744'],
+  gradientPrimary: ['#3B82F6', '#2563EB'] as const,
+  gradientDark: ['#0A1929', '#132F4C'] as const,
+  gradientCard: ['#132F4C', '#0F2744'] as const,
 };
 
 // Espaçamentos

@@ -256,7 +256,7 @@ const {
             icon="help-circle-outline"
             title="Central de ajuda"
             subtitle="Perguntas frequentes"
-            onPress={() => openLink('https://vaptvupt.com.br/ajuda')}
+            onPress={() => openLink('https://swiftway.com.br/ajuda')}
           />
           <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
           <SettingItem
@@ -280,13 +280,13 @@ const {
           <SettingItem
             icon="document-outline"
             title="Termos de uso"
-            onPress={() => openLink('https://vaptvupt.com.br/termos')}
+            onPress={() => openLink('https://swiftway.com.br/termos')}
           />
           <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
           <SettingItem
             icon="shield-outline"
             title="Política de privacidade"
-            onPress={() => openLink('https://vaptvupt.com.br/privacidade')}
+            onPress={() => openLink('https://swiftway.com.br/privacidade')}
           />
           <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
           <SettingItem
@@ -295,7 +295,7 @@ const {
             subtitle="Versão 1.0.0"
             onPress={() => {
               Alert.alert(
-                'VAPT VUPT',
+                'SWIFT WAY',
                 'Versão 1.0.0\n\nConectando transportadoras a motoristas autônomos de forma rápida e eficiente.',
                 [{ text: 'OK' }]
               );
@@ -326,7 +326,7 @@ const {
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
-            VAPT VUPT - Logística Inteligente
+            SWIFT WAY - Logística Inteligente
           </Text>
           <Text style={[styles.footerVersion, { color: theme.colors.textSecondary }]}>
             Versão 1.0.0 (Build 1)

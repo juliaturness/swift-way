@@ -1,38 +1,124 @@
-// Tipos de Usuário
-export type UserType = 'driver' | 'carrier' | 'admin';
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS / UNIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type UserRole = 'DRIVER' | 'CARRIER' | 'ADMIN';
 
 export type DriverStatus = 'available' | 'busy' | 'offline';
 
-// Usuário/Motorista
+export type DocumentStatus = 'approved' | 'pending' | 'rejected';
+export type DocumentType = 'CNH' | 'CRLV' | 'MOPP' | 'INSURANCE' | 'OTHER';
+
+export type CargoStatus = 'pending' | 'matched' | 'in_transit' | 'delivered' | 'cancelled';
+export type CargoPriority = 'high' | 'medium' | 'low';
+
+export type TripStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+export type NotificationType = 'offer' | 'status' | 'document' | 'system';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH  (espelha AuthDtos.java do backend)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** POST /api/v1/auth/register */
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  role: UserRole;
+
+  // campos obrigatórios para DRIVER
+  fullName?: string;
+  cpf?: string;
+  phone?: string;
+  cnhNumber?: string;
+  cnhCategory?: string;
+  cnhValidity?: string; // ISO: "YYYY-MM-DD"
+
+  // campos obrigatórios para CARRIER
+  cnpj?: string;
+  razaoSocial?: string;
+  nomeFantasia?: string;
+}
+
+/** POST /api/v1/auth/login */
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+/** POST /api/v1/auth/refresh */
+export interface RefreshRequest {
+  refreshToken: string;
+}
+
+/** POST /api/v1/auth/logout */
+export interface LogoutRequest {
+  refreshToken: string;
+}
+
+/** Resposta de qualquer endpoint de auth */
+export interface TokenResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number; // segundos
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USUÁRIO BASE  (campos que existem na entidade User do backend)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface User {
   id: string;
-  name: string;
   email: string;
-  phone: string;
-  cpf: string;
-  birthDate: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  avatarUrl?: string;
-  userType: UserType;
-  createdAt: string;
+  role: UserRole;
+  enabled: boolean;
+  createdAt: string; // ISO datetime
 }
 
-export interface Driver extends User {
+// ─────────────────────────────────────────────────────────────────────────────
+// PERFIL DE MOTORISTA  (entidade Driver do backend)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DriverProfile {
+  id: string;
+  user: User;
+  fullName: string;
+  cpf: string;        // armazenado sem máscara no backend
+  phone: string;
   cnhNumber: string;
   cnhCategory: string;
-  cnhExpiry: string;
-  status: DriverStatus;
-  rating: number;
-  totalTrips: number;
-  approvalRate: number;
-  monthlyEarnings: number;
-  vehicles: Vehicle[];
+  cnhValidity: string; // ISO date
+  available: boolean;  // campo `available` do backend
+  grApproved: boolean; // campo `grApproved` do backend
+
+  // campos extras do lado mobile (vindos de endpoints futuros / calculados)
+  avatarUrl?: string;
+  status?: DriverStatus;
+  rating?: number;
+  totalTrips?: number;
+  approvalRate?: number;
+  monthlyEarnings?: number;
+  vehicles?: Vehicle[];
 }
 
-// Veículo
+// ─────────────────────────────────────────────────────────────────────────────
+// PERFIL DE TRANSPORTADORA  (entidade Carrier do backend)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CarrierProfile {
+  id: string;
+  user: User;
+  cnpj: string;       // armazenado sem máscara no backend
+  razaoSocial: string;
+  nomeFantasia?: string;
+  telefone: string;
+  avatarUrl?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VEÍCULO
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface Vehicle {
   id: string;
   type: string;
@@ -43,13 +129,14 @@ export interface Vehicle {
   status: 'active' | 'maintenance' | 'inactive';
 }
 
-// Documento
-export type DocumentStatus = 'approved' | 'pending' | 'rejected';
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTO
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface Document {
   id: string;
   name: string;
-  type: 'CNH' | 'CRLV' | 'MOPP' | 'INSURANCE' | 'OTHER';
+  type: DocumentType;
   status: DocumentStatus;
   uploadDate: string;
   expiryDate?: string;
@@ -57,9 +144,9 @@ export interface Document {
   fileUrl?: string;
 }
 
-// Carga
-export type CargoStatus = 'pending' | 'matched' | 'in_transit' | 'delivered' | 'cancelled';
-export type CargoPriority = 'high' | 'medium' | 'low';
+// ─────────────────────────────────────────────────────────────────────────────
+// CARGA
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface Cargo {
   id: number;
@@ -82,13 +169,20 @@ export interface Cargo {
   carrierId: string;
 }
 
-// Oferta de Carga
 export interface CargoOffer extends Cargo {
   matchScore: number;
 }
 
-// Viagem
-export type TripStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+// ─────────────────────────────────────────────────────────────────────────────
+// VIAGEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GeoLocation {
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+  address?: string;
+}
 
 export interface Trip {
   id: number;
@@ -103,19 +197,12 @@ export interface Trip {
   endDate?: string;
   payment: string;
   progress?: number;
-  currentLocation?: Location;
+  currentLocation?: GeoLocation;
 }
 
-// Localização
-export interface Location {
-  latitude: number;
-  longitude: number;
-  timestamp: number;
-  address?: string;
-}
-
-// Notificação
-export type NotificationType = 'offer' | 'status' | 'document' | 'system';
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICAÇÃO
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface Notification {
   id: string;
@@ -127,7 +214,10 @@ export interface Notification {
   data?: Record<string, unknown>;
 }
 
-// Configurações
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURAÇÕES
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface Settings {
   emailNotifications: boolean;
   pushNotifications: boolean;
@@ -141,15 +231,18 @@ export interface Settings {
   timezone: string;
 }
 
-// Tipos de Navegação
+// ─────────────────────────────────────────────────────────────────────────────
+// NAVEGAÇÃO
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type RootStackParamList = {
   Welcome: undefined;
   Login: undefined;
   Register: undefined;
   MainTabs: undefined;
-  CargoDetails: { cargoId: number };
-  OfferDetails: { offerId: number };
-  TripDetails: { tripId: number };
+  CargoDetails: { cargoId: string };
+  OfferDetails: { offerId: string };
+  TripDetails: { tripId: string };
   DocumentUpload: undefined;
   EditProfile: undefined;
   AddVehicle: undefined;
@@ -163,7 +256,10 @@ export type MainTabParamList = {
   Settings: undefined;
 };
 
-// Respostas da API
+// ─────────────────────────────────────────────────────────────────────────────
+// RESPOSTAS GENÉRICAS DE API
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -171,17 +267,24 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-// Estado do App
+// ─────────────────────────────────────────────────────────────────────────────
+// ESTADOS GLOBAIS
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface AppState {
   isLoading: boolean;
   isOnline: boolean;
   theme: 'light' | 'dark';
 }
 
-// Estado de Auth
+/**
+ * Estado de autenticação usado no AuthContext.
+ * `profile` pode ser DriverProfile ou CarrierProfile dependendo do role.
+ */
 export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
-  user: Driver | null;
-  token: string | null;
+  user: User | null;
+  profile: DriverProfile | CarrierProfile | null;
+  accessToken: string | null;
 }
