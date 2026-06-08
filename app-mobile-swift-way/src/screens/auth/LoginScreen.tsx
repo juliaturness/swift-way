@@ -18,91 +18,58 @@ import { colors, typography, spacing, borderRadius, iconSizes } from '../../them
 import { RootStackParamList } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 
-// definindo q a tela precisa saber como navegar pra outras partes do app.
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
 };
 
-// rotina principal q desenha a tela de login.
 export function LoginScreen({ navigation }: LoginScreenProps) {
-  // pegando a ação de entrar e o estado atual do sistema de contas.
   const { login, state } = useAuth();
-  
-  // criando caixinhas de memória pra guardar as informações q o usuário digitar.
   const [formData, setFormData] = useState({ email: '', password: '' });
-  
-  // caixinha pra guardar os avisos de erro na digitação.
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  
-  // caixinha pra saber se o usuário quer q o sistema lembre da conta depois.
-  const [rememberMe, setRememberMe] = useState(false);
 
-  // validação q confere se o q foi digitado faz sentido antes de tentar entrar.
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
 
-    // se n tem email, prepara o aviso de q é obrigatório.
     if (!formData.email) {
       newErrors.email = 'E-mail é obrigatório';
-    // se o email n tem um formato normal, avisa q tá inválido.
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'E-mail inválido';
     }
 
-    // se n tem senha, pede pra digitar.
     if (!formData.password) {
       newErrors.password = 'Senha é obrigatória';
-    // a senha precisa ter pelo menos 6 letras ou números.
     } else if (formData.password.length < 6) {
       newErrors.password = 'Senha deve ter pelo menos 6 caracteres';
     }
 
-    // guarda os erros encontrados na caixinha de erros.
     setErrors(newErrors);
-    
-    // informa se tudo deu certo e n tem nenhum erro.
     return Object.keys(newErrors).length === 0;
   };
 
-  // o q acontece quando o botão de entrar é apertado.
   const handleLogin = async () => {
-    // se as informações n passaram na checagem, a ação é interrompida.
     if (!validateForm()) return;
 
-    // tenta fazer o acesso com o email e senha digitados.
-    const success = await login(formData.email, formData.password);
-    
-    // se n deu certo, mostra um aviso na tela.
+    // Role vem do backend via JWT — por ora é resolvido no AuthContext
+    // A tela passa 'DRIVER' como padrão; ajustar quando houver seleção de perfil ou endpoint /me
+    const success = await login(formData.email, formData.password, 'DRIVER');
+
     if (!success) {
       setErrors({ password: 'E-mail ou senha incorretos' });
     }
   };
 
-  // a parte visual q aparece pro usuário no celular.
   return (
     <LinearGradient colors={colors.gradientDark} style={styles.container}>
-      {
-        // faz com q o teclado do celular n esconda as coisas q o usuário tá lendo ou digitando.
-      }
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        {
-          // permite rolar a tela pra cima e pra baixo.
-        }
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {
-            // topo da tela com o botão de voltar. tem uma animação suave ao aparecer.
-          }
           <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.header}>
-            {
-              // botão q dá pra apertar pra voltar pra tela anterior.
-            }
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
@@ -112,9 +79,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
             </TouchableOpacity>
           </Animated.View>
 
-          {
-            // espaço onde fica o desenho do caminhão e o nome do aplicativo.
-          }
           <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.logoSection}>
             <View style={styles.logoWrapper}>
               <Truck size={iconSizes.xxl} color={colors.text} />
@@ -123,9 +87,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
             <Text style={styles.logoSubtitle}>Sistema Logístico</Text>
           </Animated.View>
 
-          {
-            // quadro principal onde ficam os espaços pra preencher os dados.
-          }
           <Animated.View entering={FadeInUp.delay(300).duration(500)} style={styles.formCard}>
             <Text style={styles.formTitle}>Bem-vindo de volta!</Text>
             <Text style={styles.formSubtitle}>
@@ -133,9 +94,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
             </Text>
 
             <View style={styles.form}>
-              {
-                // espaço pra preencher o e-mail.
-              }
               <Input
                 label="E-mail"
                 placeholder="seu@email.com"
@@ -148,9 +106,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
                 icon={<Mail size={iconSizes.md} color={colors.textMuted} />}
               />
 
-              {
-                // espaço pra preencher a senha, escondendo as letras.
-              }
               <Input
                 label="Senha"
                 placeholder="Digite sua senha"
@@ -161,34 +116,13 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
                 icon={<Lock size={iconSizes.md} color={colors.textMuted} />}
               />
 
-              {
-                // linha com as opções de lembrar conta e recuperar senha.
-              }
               <View style={styles.optionsRow}>
-                {
-                  // botão de marcar pra salvar a conta.
-                }
-                <TouchableOpacity
-                  style={styles.rememberMe}
-                  onPress={() => setRememberMe(!rememberMe)}
-                >
-                  <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                    {rememberMe && <View style={styles.checkboxInner} />}
-                  </View>
-                  <Text style={styles.rememberMeText}>Lembrar-me</Text>
-                </TouchableOpacity>
-
-                {
-                  // texto apertável pra quem esqueceu a senha.
-                }
+                {/* Recuperação de senha fora do escopo do MVP */}
                 <TouchableOpacity>
                   <Text style={styles.forgotPassword}>Esqueceu a senha?</Text>
                 </TouchableOpacity>
               </View>
 
-              {
-                // botão grande pra confirmar e entrar.
-              }
               <Button
                 title="Entrar"
                 variant="primary"
@@ -199,18 +133,12 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
                 style={styles.loginButton}
               />
 
-              {
-                // uma linha desenhada só pra separar a tela visualmente.
-              }
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>ou</Text>
                 <View style={styles.dividerLine} />
               </View>
 
-              {
-                // botão pra quem ainda n tem conta e quer criar uma nova.
-              }
               <View style={styles.registerSection}>
                 <Text style={styles.registerText}>Não tem uma conta?</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Register')}>
@@ -220,9 +148,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
             </View>
           </Animated.View>
 
-          {
-            // o rodapé da tela com as regras de uso do aplicativo.
-          }
           <Animated.View entering={FadeInUp.delay(400).duration(500)} style={styles.footer}>
             <Text style={styles.footerText}>
               Ao entrar, você concorda com nossos{' '}
@@ -236,7 +161,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
   );
 }
 
-// um dicionário de enfeites q decide a altura, cor, largura e posições de tudo q aparece na tela.
 const styles = StyleSheet.create({
   container: { flex: 1 },
   keyboardView: { flex: 1 },
@@ -301,34 +225,9 @@ const styles = StyleSheet.create({
   form: {},
   optionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: spacing.xl,
-  },
-  rememberMe: { flexDirection: 'row', alignItems: 'center' },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: borderRadius.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  checkboxInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    backgroundColor: colors.text,
-  },
-  rememberMeText: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
   },
   forgotPassword: {
     fontSize: typography.sizes.sm,

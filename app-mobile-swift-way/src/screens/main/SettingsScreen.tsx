@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { Card } from '../../components/ui/Card';
+import { RootStackParamList } from '../../types';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type SettingItemProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -30,13 +34,19 @@ type SettingItemProps = {
 
 export function SettingsScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
-  const { logout, user } = useAuth();
-const { 
-  notifications = { offers: false }, // Provide a fallback if undefined
-  setNotifications, 
-  language, 
-  setLanguage 
-} = useApp() || {}; // Protect against the entire context being undefined  const navigation = useNavigation<any>();
+
+  // ── Auth: useAuth retorna { state, logout, ... } — user fica em state.user
+  const { state, logout } = useAuth();
+  const user = state.user;
+
+  // ── App context com fallback seguro
+ const { notifications, setNotifications, language, setLanguage } = useApp();
+
+
+  // ── Navigation tipado para RootStackParamList
+  const navigation = useNavigation<Nav>();
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleLogout = () => {
     Alert.alert(
@@ -47,11 +57,9 @@ const {
         {
           text: 'Sair',
           style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
+          onPress: async () => { await logout(); },
         },
-      ]
+      ],
     );
   };
 
@@ -68,7 +76,7 @@ const {
             Alert.alert('Solicitação enviada', 'Sua solicitação de exclusão será processada em até 30 dias.');
           },
         },
-      ]
+      ],
     );
   };
 
@@ -77,6 +85,8 @@ const {
       Alert.alert('Erro', 'Não foi possível abrir o link.');
     });
   };
+
+  // ── Sub-componentes ──────────────────────────────────────────────────────────
 
   const SettingItem: React.FC<SettingItemProps> = ({
     icon,
@@ -94,7 +104,7 @@ const {
       disabled={!onPress && !rightElement}
       activeOpacity={onPress ? 0.7 : 1}
     >
-      <View style={[styles.settingIcon, { backgroundColor: danger ? theme.colors.error + '15' : theme.colors.surface }]}>
+      <View style={[styles.settingIcon, { backgroundColor: danger ? theme.colors.error + '15' : theme.colors.background }]}>
         <Ionicons
           name={icon}
           size={20}
@@ -123,6 +133,8 @@ const {
     </Text>
   );
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <View style={styles.header}>
@@ -134,19 +146,20 @@ const {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Section */}
+        {/* Profile card — navega para a aba Profile dentro de MainTabs */}
         <TouchableOpacity
-          style={[styles.profileCard, { backgroundColor: theme.colors.surface }]}
-          onPress={() => navigation.navigate('Profile')}
+          style={[styles.profileCard, { backgroundColor: theme.colors.background }]}
+          onPress={() => navigation.navigate('MainTabs')}
         >
           <View style={[styles.profileAvatar, { backgroundColor: theme.colors.primary }]}>
             <Text style={styles.profileAvatarText}>
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
+              {/* fullName é o campo correto vindo do DriverResponse */}
+              {user?.fullName?.charAt(0).toUpperCase() || 'U'}
             </Text>
           </View>
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: theme.colors.text }]}>
-              {user?.name || 'Motorista'}
+              {user?.fullName || 'Motorista'}
             </Text>
             <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>
               {user?.email || 'email@exemplo.com'}
@@ -155,7 +168,7 @@ const {
           <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
         </TouchableOpacity>
 
-        {/* Account Section */}
+        {/* Conta */}
         <SectionHeader title="CONTA" />
         <Card style={styles.section}>
           <SettingItem
@@ -169,25 +182,18 @@ const {
             icon="car-outline"
             title="Meu veículo"
             subtitle="Gerenciar dados do veículo"
-            onPress={() => navigation.navigate('VehicleInfo')}
+            onPress={() => navigation.navigate('AddVehicle')}
           />
           <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
           <SettingItem
             icon="document-text-outline"
             title="Documentos"
             subtitle="Gerenciar documentos"
-            onPress={() => navigation.navigate('Documents')}
-          />
-          <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-          <SettingItem
-            icon="wallet-outline"
-            title="Pagamentos"
-            subtitle="Dados bancários e histórico"
-            onPress={() => navigation.navigate('Payments')}
+            onPress={() => navigation.navigate('DocumentUpload')}
           />
         </Card>
 
-        {/* Preferences Section */}
+        {/* Preferências */}
         <SectionHeader title="PREFERÊNCIAS" />
         <Card style={styles.section}>
           <SettingItem
@@ -198,7 +204,9 @@ const {
             rightElement={
               <Switch
                 value={notifications.offers}
-                onValueChange={(value) => setNotifications({ ...notifications, offers: value })}
+                onValueChange={(value) =>
+                  setNotifications?.({ ...notifications, offers: value })
+                }
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary + '50' }}
                 thumbColor={notifications.offers ? theme.colors.primary : theme.colors.textSecondary}
               />
@@ -241,15 +249,15 @@ const {
             subtitle="Português (Brasil)"
             onPress={() => {
               Alert.alert('Idioma', 'Selecione o idioma', [
-                { text: 'Português (Brasil)', onPress: () => setLanguage('pt-BR') },
-                { text: 'English', onPress: () => setLanguage('en-US') },
+                { text: 'Português (Brasil)', onPress: () => setLanguage?.('pt-BR') },
+                { text: 'English',            onPress: () => setLanguage?.('en-US') },
                 { text: 'Cancelar', style: 'cancel' },
               ]);
             }}
           />
         </Card>
 
-        {/* Support Section */}
+        {/* Suporte */}
         <SectionHeader title="SUPORTE" />
         <Card style={styles.section}>
           <SettingItem
@@ -260,21 +268,14 @@ const {
           />
           <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
           <SettingItem
-            icon="chatbubble-outline"
-            title="Fale conosco"
-            subtitle="Chat com suporte"
-            onPress={() => navigation.navigate('Support')}
-          />
-          <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-          <SettingItem
             icon="bug-outline"
             title="Reportar problema"
             subtitle="Enviar feedback"
-            onPress={() => navigation.navigate('ReportIssue')}
+            onPress={() => openLink('mailto:suporte@swiftway.com.br')}
           />
         </Card>
 
-        {/* Legal Section */}
+        {/* Legal */}
         <SectionHeader title="LEGAL" />
         <Card style={styles.section}>
           <SettingItem
@@ -297,13 +298,13 @@ const {
               Alert.alert(
                 'SWIFT WAY',
                 'Versão 1.0.0\n\nConectando transportadoras a motoristas autônomos de forma rápida e eficiente.',
-                [{ text: 'OK' }]
+                [{ text: 'OK' }],
               );
             }}
           />
         </Card>
 
-        {/* Danger Zone */}
+        {/* Zona de risco */}
         <SectionHeader title="ZONA DE RISCO" />
         <Card style={styles.section}>
           <SettingItem
