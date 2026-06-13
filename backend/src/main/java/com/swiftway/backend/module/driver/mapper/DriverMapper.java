@@ -1,5 +1,6 @@
 package com.swiftway.backend.module.driver.mapper;
 
+import com.swiftway.backend.module.driver.domain.Address;
 import com.swiftway.backend.module.driver.domain.Driver;
 import com.swiftway.backend.module.driver.domain.Vehicle;
 import com.swiftway.backend.module.driver.dto.DriverDtos.*;
@@ -31,8 +32,23 @@ public class DriverMapper {
             d.getLatitude(),
             d.getLongitude(),
             d.getLocationUpdatedAt(),
+            toAddressResponse(d.getAddress()),
             d.getCreatedAt(),
             d.getUpdatedAt()
+        );
+    }
+
+    public AddressResponse toAddressResponse(Address a) {
+        if (a == null) return null;
+        return new AddressResponse(
+            a.getCep(),
+            a.getStreet(),
+            a.getNumber(),
+            a.getComplement(),
+            a.getNeighborhood(),
+            a.getCity(),
+            a.getState(),
+            a.getIbge()
         );
     }
 
