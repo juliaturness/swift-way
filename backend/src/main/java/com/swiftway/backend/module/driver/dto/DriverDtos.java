@@ -18,9 +18,9 @@ public final class DriverDtos {
         @Size(max = 255)
         String fullName,
 
-        @ValidCPF
-        @NotBlank(message = "CPF é obrigatório")
-        String cpf,
+        // @ValidCPF
+        // @NotBlank(message = "CPF é obrigatório")
+        // String cpf,
 
         @Size(max = 20)
         String phone,

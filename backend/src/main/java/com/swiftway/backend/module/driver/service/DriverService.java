@@ -40,15 +40,15 @@ public class DriverService {
     public DriverResponse updateMyProfile(String email, UpdateDriverRequest req) {
         Driver driver = findByEmail(email);
 
-        if (driverRepository.existsByCpfAndIdNot(sanitize(req.cpf()), driver.getId())) {
-            throw new BusinessConflictException("CPF já utilizado por outro motorista.");
-        }
+        // if (driverRepository.existsByCpfAndIdNot(sanitize(req.cpf()), driver.getId())) {
+        //     throw new BusinessConflictException("CPF já utilizado por outro motorista.");
+        // }
         if (req.cnhValidity() != null) {
             driver.setCnhValidity(req.cnhValidity());
         }
 
         driver.setFullName(req.fullName());
-        driver.setCpf(sanitize(req.cpf()));
+        // driver.setCpf(sanitize(req.cpf()));
         driver.setPhone(req.phone());
         driver.setCnhNumber(req.cnhNumber());
         driver.setCnhCategory(req.cnhCategory());
