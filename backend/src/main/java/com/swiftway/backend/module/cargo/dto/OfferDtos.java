@@ -4,6 +4,8 @@ import com.swiftway.backend.module.cargo.domain.enums.OfferStatus;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -38,19 +40,35 @@ public final class OfferDtos {
     // ── Responses ─────────────────────────────────────────────────
 
     public record OfferResponse(
-        UUID id,
-        UUID cargoId,
-        String origemCidade,
-        String origemEstado,
-        String destinoCidade,
-        String destinoEstado,
-        OfferStatus status,
-        BigDecimal score,
-        BigDecimal distanciaKm,
-        OffsetDateTime expiraEm,
-        OffsetDateTime respondidaEm,
-        OffsetDateTime createdAt
-    ) {}
+    UUID id,
+    UUID cargoId,
+
+    @JsonProperty("originCity")      String origemCidade,
+    @JsonProperty("originState")     String origemEstado,
+    @JsonProperty("destinationCity") String destinoCidade,
+    @JsonProperty("destinationState")String destinoEstado,
+
+    OfferStatus status,
+    BigDecimal score,
+
+    @JsonProperty("distanceKm")        BigDecimal distanciaKm,
+    @JsonProperty("expiresAt")         OffsetDateTime expiraEm,
+    @JsonProperty("answeredAt")        OffsetDateTime respondidaEm,
+    OffsetDateTime createdAt,
+
+    @JsonProperty("type")              String tipo,
+    @JsonProperty("description")       String description,
+
+    @JsonProperty("weightKg")          BigDecimal pesoKg,
+    @JsonProperty("cargoValue")        BigDecimal valorCarga,
+    @JsonProperty("pickupDeadline")    LocalDateTime dataColetaLimite,
+    @JsonProperty("estimatedDelivery") LocalDateTime dataEntregaPrevista,
+
+    UUID carrierId,
+    @JsonProperty("carrierLegalName")  String carrierRazaoSocial,
+    @JsonProperty("carrierTradeName")  String carrierNomeFantasia,
+    @JsonProperty("fotoEntregaUrl")  String fotoEntregaUrl
+) {}
 
     public record CreateOffersResponse(
         UUID cargoId,

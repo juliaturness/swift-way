@@ -17,6 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -158,5 +159,15 @@ public class DocumentService {
         return driverRepository.findByUserEmail(email)
             .orElseThrow(() -> new ResourceNotFoundException(
                 "Perfil de motorista não encontrado para: " + email));
+    }
+
+    public void delete(String email, UUID docId) {
+        Document doc = documentRepository.findById(docId)
+            .orElseThrow(() -> new ResourceNotFoundException("Documento não encontrado"));
+        // garante que o doc pertence ao motorista autenticado
+        if (!doc.getDriver().getUser().getEmail().equals(email)) {
+            throw new AccessDeniedException("Sem permissão");
+        }
+        documentRepository.delete(doc);
     }
 }

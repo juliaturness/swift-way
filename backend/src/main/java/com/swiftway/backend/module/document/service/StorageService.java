@@ -53,6 +53,10 @@ public class StorageService {
             throw new RuntimeException("Falha ao armazenar arquivo: " + e.getMessage(), e);
         }
     }
+    
+    public String saveDeliveryPhoto(MultipartFile file) {
+    return upload(file, "entregas");
+    }
 
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "";

@@ -55,6 +55,9 @@ public class Offer {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime  updatedAt;
 
+    @Column(name = "foto_entrega_url", length = 512)
+    private String fotoEntregaUrl;
+
     @PrePersist
     void onCreate() {
         createdAt = OffsetDateTime .now();
