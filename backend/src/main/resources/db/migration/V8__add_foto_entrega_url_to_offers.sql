@@ -1,0 +1,1 @@
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS foto_entrega_url VARCHAR(512);

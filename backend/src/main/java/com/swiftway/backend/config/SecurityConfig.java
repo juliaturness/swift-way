@@ -49,6 +49,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
                 .requestMatchers(SWAGGER_PATHS).permitAll()
+                .requestMatchers("/files/**").permitAll()
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider)
@@ -63,7 +64,8 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of(
             "http://localhost:80",
             "http://localhost:8081",  // expo web dev
-            "http://localhost:19006"  // expo web alternativo
+            "http://localhost:19006",
+            "http://191.36.10.94:8081" 
         ));
 
         config.setAllowedMethods(List.of(
@@ -75,6 +77,7 @@ public class SecurityConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/files/**", config);
         return source;
     }
 }

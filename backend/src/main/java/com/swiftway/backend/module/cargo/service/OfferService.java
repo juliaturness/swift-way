@@ -46,15 +46,6 @@ public class OfferService {
 
     // ── Create offers ────────────────────────────────────────────
 
-    /**
-     * POST /api/v1/cargos/{id}/offers
-     *
-     * Sends formal offers to eligible drivers.
-     * - If req.driverIds is empty, uses the existing cargo_matches for this cargo.
-     * - If req.driverIds is provided, validates each driver is in the match log.
-     * - Skips drivers that already have an active offer for this cargo.
-     * - Cargo must be in OFERTA_ENVIADA or MATCHING status.
-     */
     @Transactional
     public CreateOffersResponse createOffers(UUID cargoId,
                                              String carrierEmail,
@@ -69,7 +60,6 @@ public class OfferService {
 
         OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(expMin);
 
-        // Resolve the match log for this cargo (ordered by score desc)
         List<CargoMatch> matches = cargoMatchRepository.findByCargoIdOrderByScoreDesc(cargoId);
 
         if (matches.isEmpty()) {
@@ -77,11 +67,9 @@ public class OfferService {
                 "Nenhum match encontrado para esta carga. Execute o matching primeiro.");
         }
 
-        // Build a lookup map for quick access: driverId → match
         Map<UUID, CargoMatch> matchByDriver = matches.stream()
             .collect(Collectors.toMap(m -> m.getDriver().getId(), m -> m));
 
-        // Determine target driver set
         List<UUID> targetDriverIds = req.driverIds().isEmpty()
             ? new ArrayList<>(matchByDriver.keySet())
             : req.driverIds();
@@ -96,7 +84,6 @@ public class OfferService {
                 continue;
             }
 
-            // Skip duplicates (unique constraint: cargo_id + driver_id)
             if (offerRepository.existsByCargoIdAndDriverId(cargoId, driverId)) {
                 log.debug("Offer already exists for driverId={} cargoId={} — skipping", driverId, cargoId);
                 continue;
@@ -124,13 +111,6 @@ public class OfferService {
 
     // ── List pending offers (driver feed) ────────────────────────
 
-    /**
-     * GET /api/v1/offers
-     *
-     * Returns ENVIADA offers for the authenticated driver, newest first.
-     * Expired offers are included (expiration is enforced by a scheduled job,
-     * not filtered here) so the driver can see them in their feed.
-     */
     @Transactional(readOnly = true)
     public PageResponse<OfferResponse> listMyOffers(String driverEmail, Pageable pageable) {
         Page<Offer> page = offerRepository.findPendingByDriverEmail(driverEmail, pageable);
@@ -150,17 +130,37 @@ public class OfferService {
         );
     }
 
-    // ── Accept ───────────────────────────────────────────────────
+    // ── List trips (accepted offers) ─────────────────────────────
 
     /**
-     * POST /api/v1/offers/{id}/accept
+     * GET /api/v1/trips
      *
-     * 1. Validates the offer belongs to the caller and is still ENVIADA.
-     * 2. Checks the offer hasn't expired.
-     * 3. Marks this offer ACEITA.
-     * 4. Cancels all other open offers for the same cargo.
-     * 5. Updates cargo status to MOTORISTA_ALOCADO.
+     * Returns ACEITA offers for the authenticated driver.
+     * These represent active and past trips. Whether a trip is "active" or
+     * "completed" is derived from cargo.status (MOTORISTA_ALOCADO/EM_TRANSITO
+     * vs CONCLUIDO) on the frontend — the offer itself stays ACEITA.
      */
+    @Transactional(readOnly = true)
+    public PageResponse<OfferResponse> listMyTrips(String driverEmail, Pageable pageable) {
+        Page<Offer> page = offerRepository.findAcceptedByDriverEmail(driverEmail, pageable);
+
+        List<OfferResponse> content = page.getContent()
+            .stream()
+            .map(mapper::toResponse)
+            .toList();
+
+        return new PageResponse<>(
+            content,
+            page.getNumber(),
+            page.getSize(),
+            page.getTotalElements(),
+            page.getTotalPages(),
+            page.isLast()
+        );
+    }
+
+    // ── Accept ───────────────────────────────────────────────────
+
     @Transactional
     public OfferResponse accept(UUID offerId, String driverEmail) {
         Offer offer = findOfferForDriver(offerId, driverEmail);
@@ -171,12 +171,10 @@ public class OfferService {
         offer.setRespondidaEm(OffsetDateTime.now());
         offerRepository.save(offer);
 
-        // Cancel all other pending offers for this cargo
         int cancelled = offerRepository.cancelOtherOffers(offer.getCargo().getId(), offerId);
         log.info("Offer accepted: offerId={} driverId={} — {} other offers cancelled",
             offerId, offer.getDriver().getId(), cancelled);
 
-        // Allocate the cargo
         Cargo cargo = offer.getCargo();
         cargo.setStatus(CargoStatus.MOTORISTA_ALOCADO);
         cargoRepository.save(cargo);
@@ -186,13 +184,6 @@ public class OfferService {
 
     // ── Decline ──────────────────────────────────────────────────
 
-    /**
-     * POST /api/v1/offers/{id}/decline
-     *
-     * Marks the offer RECUSADA and records the optional reason.
-     * If all offers for the cargo are now closed and none was accepted,
-     * the cargo reverts to AGUARDANDO so the carrier can re-trigger matching.
-     */
     @Transactional
     public OfferResponse decline(UUID offerId, String driverEmail, String motivoRecusa) {
         Offer offer = findOfferForDriver(offerId, driverEmail);
@@ -205,17 +196,86 @@ public class OfferService {
 
         log.info("Offer declined: offerId={} driverId={}", offerId, offer.getDriver().getId());
 
-        // Check if any offer is still pending for this cargo
         Cargo cargo = offer.getCargo();
         checkAndRevertCargo(cargo);
 
         return mapper.toResponse(offer);
     }
 
+    // ── Start trip ───────────────────────────────────────────────
+
+    /**
+     * POST /api/v1/trips/{offerId}/start
+     *
+     * Driver marca o início da viagem (coleta realizada).
+     * 1. Valida que a offer pertence ao driver autenticado e está ACEITA.
+     * 2. Valida que o cargo está em MOTORISTA_ALOCADO.
+     * 3. Atualiza cargo.status -> EM_TRANSITO.
+     */
+    @Transactional
+    public OfferResponse startTrip(UUID offerId, String driverEmail) {
+        Offer offer = findOfferForDriver(offerId, driverEmail);
+
+        if (offer.getStatus() != OfferStatus.ACEITA) {
+            throw new BusinessConflictException(
+                "Apenas viagens aceitas podem ser iniciadas. Status atual: " + offer.getStatus());
+        }
+
+        Cargo cargo = offer.getCargo();
+
+        if (cargo.getStatus() != CargoStatus.MOTORISTA_ALOCADO) {
+            throw new BusinessConflictException(
+                "Esta viagem não pode ser iniciada no status atual: " + cargo.getStatus());
+        }
+
+        cargo.setStatus(CargoStatus.EM_TRANSITO);
+        cargoRepository.save(cargo);
+
+        log.info("Trip started: offerId={} cargoId={} driverId={}",
+            offerId, cargo.getId(), offer.getDriver().getId());
+
+        return mapper.toResponse(offer);
+    }
+
+    // ── Complete trip ────────────────────────────────────────────
+
+    /**
+     * POST /api/v1/trips/{offerId}/complete
+     *
+     * Driver marca a entrega como concluída.
+     * 1. Valida que a offer pertence ao driver autenticado e está ACEITA.
+     * 2. Atualiza cargo.status -> CONCLUIDO.
+     * 3. Registra o timestamp de conclusão na offer (reaproveitando respondidaEm
+     *    caso ainda não esteja preenchido).
+     */
+    @Transactional
+    public OfferResponse completeTrip(UUID offerId, String driverEmail, String fotoEntregaUrl) {
+        Offer offer = findOfferForDriver(offerId, driverEmail);
+
+        if (offer.getStatus() != OfferStatus.ACEITA)
+            throw new BusinessConflictException(
+                "Apenas viagens aceitas podem ser concluídas. Status atual: " + offer.getStatus());
+
+        Cargo cargo = offer.getCargo();
+        if (cargo.getStatus() == CargoStatus.CONCLUIDO)
+            throw new BusinessConflictException("Esta viagem já foi concluída.");
+
+        cargo.setStatus(CargoStatus.CONCLUIDO);
+        cargoRepository.save(cargo);
+
+        offer.setFotoEntregaUrl(fotoEntregaUrl);         // <- novo
+        if (offer.getRespondidaEm() == null)
+            offer.setRespondidaEm(OffsetDateTime.now());
+        offerRepository.save(offer);
+
+        log.info("Trip completed: offerId={} cargoId={} driverId={} foto={}",
+            offerId, cargo.getId(), offer.getDriver().getId(), fotoEntregaUrl);
+
+        return mapper.toResponse(offer);
+    }
     // ── Helpers ───────────────────────────────────────────────────
 
     private void checkAndRevertCargo(Cargo cargo) {
-        // If no offer is still open (ENVIADA or ACEITA), revert to AGUARDANDO
         boolean anyOpen = cargoMatchRepository.existsOpenOfferForCargo(cargo.getId());
         if (!anyOpen && cargo.getStatus() == CargoStatus.OFERTA_ENVIADA) {
             cargo.setStatus(CargoStatus.AGUARDANDO);
@@ -259,7 +319,6 @@ public class OfferService {
 
     private void assertNotExpired(Offer offer) {
         if (OffsetDateTime.now().isAfter(offer.getExpiraEm())) {
-            // Mark as expired lazily and propagate a user-friendly error
             offer.setStatus(OfferStatus.EXPIRADA);
             offerRepository.save(offer);
             throw new BusinessConflictException("Esta oferta já expirou.");

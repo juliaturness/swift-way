@@ -76,4 +76,15 @@ public class DocumentController {
         return ResponseEntity.ok(
             documentService.validate(driverId, docId, adminId, request));
     }
+
+    @DeleteMapping("/me/documents/{docId}")
+    @PreAuthorize("hasRole('DRIVER')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Remove um documento do motorista autenticado")
+    public ResponseEntity<Void> delete(
+        @AuthenticationPrincipal UserDetails principal,
+        @PathVariable UUID docId) {
+        documentService.delete(principal.getUsername(), docId);
+        return ResponseEntity.noContent().build();
+    }
 }

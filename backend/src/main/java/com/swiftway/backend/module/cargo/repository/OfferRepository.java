@@ -1,7 +1,6 @@
 package com.swiftway.backend.module.cargo.repository;
 
 import com.swiftway.backend.module.cargo.domain.entity.Offer;
-import com.swiftway.backend.module.cargo.domain.enums.OfferStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,16 +31,34 @@ public interface OfferRepository extends JpaRepository<Offer, UUID> {
      */
     @Modifying
     @Query(value = """
-    UPDATE offers
-    SET status = 'CANCELADA'::offer_status,
-        updated_at = NOW()
-    WHERE cargo_id = :cargoId
-      AND status = 'ENVIADA'::offer_status
-      AND id <> :excludedOfferId
-    """, nativeQuery = true)
+        UPDATE offers
+        SET status = 'CANCELADA'::offer_status,
+            updated_at = NOW()
+        WHERE cargo_id = :cargoId
+          AND status = 'ENVIADA'::offer_status
+          AND id <> :excludedOfferId
+        """, nativeQuery = true)
     int cancelOtherOffers(@Param("cargoId") UUID cargoId,
                           @Param("excludedOfferId") UUID excludedOfferId);
+
     Optional<Offer> findByIdAndDriverUserEmail(UUID id, String email);
 
     boolean existsByCargoIdAndDriverId(UUID cargoId, UUID driverId);
+
+    /**
+     * Viagens do motorista: ofertas ACEITA, com cargo e transportadora carregados.
+     * Usada por GET /api/v1/trips. O status da viagem (ativa/concluída) é
+     * derivado de cargo.status no front (MOTORISTA_ALOCADO/EM_TRANSITO vs CONCLUIDO).
+     */
+    @Query("""
+        SELECT o FROM Offer o
+        JOIN FETCH o.cargo c
+        JOIN FETCH c.carrier
+        LEFT JOIN FETCH o.cargoMatch
+        WHERE o.driver.user.email = :email
+          AND o.status = 'ACEITA'
+        ORDER BY o.createdAt DESC
+        """)
+    Page<Offer> findAcceptedByDriverEmail(@Param("email") String email, Pageable pageable);
+
 }
