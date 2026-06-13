@@ -87,6 +87,9 @@ public class Driver {
     @OneToMany(mappedBy = "driver", cascade = CascadeType.ALL, orphanRemoval = false, fetch = FetchType.LAZY)
     private List<Vehicle> vehicles = new ArrayList<>();
 
+    @OneToOne(mappedBy = "driver", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Address address;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

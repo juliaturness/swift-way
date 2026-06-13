@@ -12,6 +12,43 @@ public final class DriverDtos {
 
     private DriverDtos() {}
 
+    public record AddressRequest(
+        @Size(max = 8, message = "CEP deve ter no máximo 8 caracteres")
+        String cep,
+
+        @Size(max = 255)
+        String street,
+
+        @Size(max = 20)
+        String number,
+
+        @Size(max = 100)
+        String complement,
+
+        @Size(max = 100)
+        String neighborhood,
+
+        @Size(max = 100)
+        String city,
+
+        @Size(max = 2, message = "Estado deve ser a sigla com 2 letras")
+        String state,
+
+        @Size(max = 7)
+        String ibge
+    ) {}
+
+    public record AddressResponse(
+        String cep,
+        String street,
+        String number,
+        String complement,
+        String neighborhood,
+        String city,
+        String state,
+        String ibge
+    ) {}
+
     public record UpdateDriverRequest(
 
         @NotBlank(message = "Nome completo é obrigatório")
@@ -31,7 +68,9 @@ public final class DriverDtos {
         @Size(max = 5, message = "Categoria da CNH deve ter no máximo 5 caracteres")
         String cnhCategory,
 
-        LocalDate cnhValidity
+        LocalDate cnhValidity,
+
+        AddressRequest address
     ) {}
 
     public record UpdateAvailabilityRequest(
@@ -106,6 +145,7 @@ public final class DriverDtos {
         BigDecimal latitude,
         BigDecimal longitude,
         LocalDateTime locationUpdatedAt,
+        AddressResponse address,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
     ) {}

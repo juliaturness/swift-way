@@ -1,9 +1,11 @@
 package com.swiftway.backend.module.driver.service;
 
+import com.swiftway.backend.module.driver.domain.Address;
 import com.swiftway.backend.module.driver.domain.Driver;
 import com.swiftway.backend.module.driver.domain.Vehicle;
 import com.swiftway.backend.module.driver.dto.DriverDtos.*;
 import com.swiftway.backend.module.driver.mapper.DriverMapper;
+import com.swiftway.backend.module.driver.repository.DriverAddressRepository;
 import com.swiftway.backend.module.driver.repository.DriverRepository;
 import com.swiftway.backend.module.driver.repository.VehicleRepository;
 import com.swiftway.backend.shared.exception.BusinessConflictException;
@@ -29,6 +31,7 @@ public class DriverService {
 
     private final DriverRepository driverRepository;
     private final VehicleRepository vehicleRepository;
+    private final DriverAddressRepository addressRepository;
     private final DriverMapper mapper;
 
     @Transactional(readOnly = true)
@@ -43,6 +46,7 @@ public class DriverService {
         // if (driverRepository.existsByCpfAndIdNot(sanitize(req.cpf()), driver.getId())) {
         //     throw new BusinessConflictException("CPF já utilizado por outro motorista.");
         // }
+        
         if (req.cnhValidity() != null) {
             driver.setCnhValidity(req.cnhValidity());
         }
@@ -52,6 +56,23 @@ public class DriverService {
         driver.setPhone(req.phone());
         driver.setCnhNumber(req.cnhNumber());
         driver.setCnhCategory(req.cnhCategory());
+
+        if (req.address() != null) {
+            Address address = driver.getAddress() != null
+                ? driver.getAddress()
+                : Address.builder().driver(driver).build();
+
+            address.setCep(req.address().cep());
+            address.setStreet(req.address().street());
+            address.setNumber(req.address().number());
+            address.setComplement(req.address().complement());
+            address.setNeighborhood(req.address().neighborhood());
+            address.setCity(req.address().city());
+            address.setState(req.address().state());
+            address.setIbge(req.address().ibge());
+
+            driver.setAddress(addressRepository.save(address));
+        }
 
         Driver saved = driverRepository.save(driver);
         log.info("Driver profile updated: driverId={}", saved.getId());
