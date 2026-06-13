@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -8,50 +8,47 @@ import { Button } from '../../components/ui/Button';
 import { colors, typography, spacing, borderRadius, iconSizes } from '../../theme';
 import { RootStackParamList } from '../../types';
 
-// pegando o tamanho exato da tela do celular.
 const { width, height } = Dimensions.get('window');
 
-// definindo como a tela vai navegar pra outras partes do aplicativo.
 type WelcomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Welcome'>;
 };
 
-// rotina principal q desenha a tela de boas-vindas.
-export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
-  // listinha com as principais vantagens q o aplicativo oferece.
-  const features = [
-    { icon: MapPin, text: 'Cargas em todo Brasil' },
-    { icon: Shield, text: 'Pagamentos seguros' },
-    { icon: Zap, text: 'Match inteligente' },
-  ];
+const FEATURES = [
+  { icon: MapPin, text: 'Cargas em todo Brasil' },
+  { icon: Shield, text: 'Pagamentos seguros' },
+  { icon: Zap, text: 'Match inteligente' },
+];
 
-  // a parte visual q realmente aparece pro usuário no celular.
+// Posições geradas uma única vez fora do componente — evita recálculo a cada render
+const BACKGROUND_CIRCLES = Array.from({ length: 6 }, () => ({
+  top: Math.random() * height * 0.6,
+  left: Math.random() * width,
+  opacity: 0.03 + Math.random() * 0.05,
+  size: 100 + Math.random() * 200,
+}));
+
+export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
   return (
     <LinearGradient colors={colors.gradientDark} style={styles.container}>
-      {
-        // desenhando bolinhas espalhadas aleatoriamente pelo fundo pra enfeitar.
-      }
       <View style={styles.backgroundPattern}>
-        {[...Array(6)].map((_, i) => (
+        {BACKGROUND_CIRCLES.map((circle, i) => (
           <View
             key={i}
             style={[
               styles.patternCircle,
               {
-                top: Math.random() * height * 0.6,
-                left: Math.random() * width,
-                opacity: 0.03 + Math.random() * 0.05,
-                width: 100 + Math.random() * 200,
-                height: 100 + Math.random() * 200,
+                top: circle.top,
+                left: circle.left,
+                opacity: circle.opacity,
+                width: circle.size,
+                height: circle.size,
               },
             ]}
           />
         ))}
       </View>
 
-      {
-        // espaço onde fica o símbolo do caminhão e o nome do aplicativo.
-      }
       <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.logoSection}>
         <View style={styles.logoContainer}>
           <LinearGradient colors={colors.gradientPrimary} style={styles.logoWrapper}>
@@ -62,13 +59,10 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
         <Text style={styles.subtitle}>Sistema Logístico Inteligente</Text>
       </Animated.View>
 
-      {
-        // área q mostra as vantagens de usar o aplicativo.
-      }
       <Animated.View entering={FadeInUp.delay(400).duration(600)} style={styles.featuresSection}>
         <Text style={styles.featuresTitle}>Conectando motoristas e transportadoras</Text>
         <View style={styles.featuresList}>
-          {features.map((feature, index) => (
+          {FEATURES.map((feature, index) => (
             <Animated.View
               key={index}
               entering={FadeInUp.delay(600 + index * 100).duration(400)}
@@ -83,9 +77,6 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
         </View>
       </Animated.View>
 
-      {
-        // quadro com os números e resultados do aplicativo.
-      }
       <Animated.View entering={FadeInUp.delay(700).duration(600)} style={styles.statsSection}>
         <View style={styles.statItem}>
           <Text style={styles.statValue}>2.5k+</Text>
@@ -103,9 +94,6 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
         </View>
       </Animated.View>
 
-      {
-        // botões grandes pra pessoa entrar ou criar uma conta nova.
-      }
       <Animated.View entering={FadeInUp.delay(900).duration(600)} style={styles.actionsSection}>
         <Button
           title="Entrar"
@@ -132,7 +120,6 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
   );
 }
 
-// dicionário de enfeites q decide a cor, tamanho e posição de tudo na tela.
 const styles = StyleSheet.create({
   container: {
     flex: 1,

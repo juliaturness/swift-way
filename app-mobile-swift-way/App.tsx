@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider } from './src/context/AppContext';
 import { AuthProvider } from './src/context/AuthContext';
-import { LocationProvider } from './src/context/LocationContext';
+import { GeoLocationProvider } from './src/context/LocationContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 
 export default function App() {
@@ -14,9 +14,9 @@ export default function App() {
         <AppProvider>
           <AuthProvider>
               <StatusBar style="light" />
-            <LocationProvider>
+            <GeoLocationProvider>
               <RootNavigator />
-            </LocationProvider>
+            </GeoLocationProvider>
           </AuthProvider>
         </AppProvider>
       </SafeAreaProvider>

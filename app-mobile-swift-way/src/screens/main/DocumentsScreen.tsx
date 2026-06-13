@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -16,111 +17,173 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Trash2,
-  Download,
-  Plus,
 } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCargo } from '../../context/CargoContext';
+import { documentApi, DocumentResponse, DocumentStatus, DocumentType, UploadDocumentParams } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
-import { StatusBadge } from '../../components/ui/Badge';
+import { Badge } from '../../components/ui/Badge';
 import { colors, typography, spacing, borderRadius, iconSizes } from '../../theme';
-import { RootStackParamList, Document } from '../../types';
+import { RootStackParamList } from '../../types';
 
 type DocumentsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'DocumentUpload'>;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * O backend retorna status em maiúsculas (PENDING / APPROVED / REJECTED).
+ * Mapeia para labels PT-BR e cores.
+ */
+function statusLabel(status: DocumentStatus): string {
+  switch (status) {
+    case 'APPROVED': return 'Aprovado';
+    case 'PENDING':  return 'Em Análise';
+    case 'REJECTED': return 'Rejeitado';
+  }
+}
+
+function statusColor(status: DocumentStatus): string {
+  switch (status) {
+    case 'APPROVED': return colors.success;
+    case 'PENDING':  return colors.warning;
+    case 'REJECTED': return colors.error;
+  }
+}
+
+function typeLabel(type: DocumentType): string {
+  switch (type) {
+    case 'CNH':       return 'CNH';
+    case 'CRLV':      return 'CRLV';
+    case 'MOPP':      return 'MOPP';
+    case 'INSURANCE': return 'Seguro';
+    case 'OTHER':     return 'Outro';
+  }
+}
+
+/** Formata "YYYY-MM-DD" → "DD/MM/YYYY" */
+function formatDate(iso?: string): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DOCUMENT_TYPES: DocumentType[] = ['CNH', 'CRLV', 'MOPP', 'INSURANCE', 'OTHER'];
+const CATEGORY_FILTERS: { key: DocumentType | null; label: string }[] = [
+  { key: null,        label: 'Todos'  },
+  { key: 'CNH',      label: 'CNH'    },
+  { key: 'CRLV',     label: 'CRLV'   },
+  { key: 'MOPP',     label: 'MOPP'   },
+  { key: 'INSURANCE',label: 'Seguro' },
+  { key: 'OTHER',    label: 'Outros' },
+];
+
 export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
-  const { documents, uploadDocument, deleteDocument, isLoading } = useCargo();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [documents, setDocuments]           = useState<DocumentResponse[]>([]);
+  const [isLoading, setIsLoading]           = useState(false);
+  const [isUploading, setIsUploading]       = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<DocumentType | null>(null);
 
-  const categories = [
-    { key: null, label: 'Todos' },
-    { key: 'CNH', label: 'CNH' },
-    { key: 'CRLV', label: 'CRLV' },
-    { key: 'MOPP', label: 'MOPP' },
-    { key: 'INSURANCE', label: 'Seguro' },
-    { key: 'OTHER', label: 'Outros' },
-  ];
+  // ── Fetch ──────────────────────────────────────────────────────────────────
 
-  const filteredDocuments = selectedCategory
-    ? documents.filter((d) => d.type === selectedCategory)
-    : documents;
+  const fetchDocuments = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await documentApi.listMine();
+      setDocuments(data);
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message ?? 'Não foi possível carregar os documentos.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
+
+  // ── Upload ─────────────────────────────────────────────────────────────────
 
   const handleUpload = () => {
     Alert.alert(
       'Enviar Documento',
-      'Escolha o tipo de documento que deseja enviar',
+      'Escolha o tipo de documento',
       [
-        {
-          text: 'CNH',
-          onPress: () => simulateUpload('CNH'),
-        },
-        {
-          text: 'CRLV',
-          onPress: () => simulateUpload('CRLV'),
-        },
-        {
-          text: 'Outro',
-          onPress: () => simulateUpload('OTHER'),
-        },
-        { text: 'Cancelar', style: 'cancel' },
-      ]
+        ...DOCUMENT_TYPES.map((t) => ({
+          text: typeLabel(t),
+          onPress: () => pickAndUpload(t),
+        })),
+        { text: 'Cancelar', style: 'cancel' as const },
+      ],
     );
   };
 
-  const simulateUpload = async (type: string) => {
-    const success = await uploadDocument({
-      name: `Documento ${type}`,
-      type: type as any,
-      expiryDate: '31/12/2027',
+  const pickAndUpload = async (type: DocumentType) => {
+    // Abre o file picker nativo
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/jpeg', 'image/png'],
+      copyToCacheDirectory: true,
     });
 
-    if (success) {
-      Alert.alert('Sucesso', 'Documento enviado com sucesso! Aguarde a analise.');
-    }
-  };
+    // Usuário cancelou
+    if (result.canceled || !result.assets?.length) return;
 
-  const handleDelete = (doc: Document) => {
-    Alert.alert(
-      'Excluir Documento',
-      `Deseja excluir o documento "${doc.name}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
+    const asset = result.assets[0];
+
+    // Opcionalmente, pedir a validade para CNH / CRLV
+    // Por simplicidade usamos null aqui — adicione um DatePicker se necessário
+    const params: UploadDocumentParams = { type };
+
+    setIsUploading(true);
+    try {
+      const uploaded = await documentApi.upload(
         {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteDocument(doc.id);
-          },
+          uri:  asset.uri,
+          name: asset.name ?? `documento.${asset.mimeType?.split('/')[1] ?? 'pdf'}`,
+          type: asset.mimeType ?? 'application/octet-stream',
         },
-      ]
-    );
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <CheckCircle size={iconSizes.lg} color={colors.success} />;
-      case 'pending':
-        return <Clock size={iconSizes.lg} color={colors.warning} />;
-      default:
-        return <AlertCircle size={iconSizes.lg} color={colors.error} />;
+        params,
+      );
+      // Adiciona otimisticamente ao topo da lista
+      setDocuments((prev) => [uploaded, ...prev]);
+      Alert.alert('Sucesso', 'Documento enviado! Aguarde a análise.');
+    } catch (e: any) {
+      Alert.alert('Erro no upload', e?.message ?? 'Tente novamente.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    return <FileText size={iconSizes.xl} color={colors.primary} />;
-  };
+  // ── Derived ────────────────────────────────────────────────────────────────
+
+  const filtered = selectedCategory
+    ? documents.filter((d) => d.type === selectedCategory)
+    : documents;
 
   const stats = {
-    total: documents.length,
-    approved: documents.filter((d) => d.status === 'approved').length,
-    pending: documents.filter((d) => d.status === 'pending').length,
-    rejected: documents.filter((d) => d.status === 'rejected').length,
+    total:    documents.length,
+    approved: documents.filter((d) => d.status === 'APPROVED').length,
+    pending:  documents.filter((d) => d.status === 'PENDING').length,
+    rejected: documents.filter((d) => d.status === 'REJECTED').length,
   };
+
+  // ── Status icon ────────────────────────────────────────────────────────────
+
+  const StatusIcon = ({ status }: { status: DocumentStatus }) => {
+    switch (status) {
+      case 'APPROVED': return <CheckCircle size={iconSizes.lg} color={colors.success} />;
+      case 'PENDING':  return <Clock       size={iconSizes.lg} color={colors.warning} />;
+      case 'REJECTED': return <AlertCircle size={iconSizes.lg} color={colors.error}   />;
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -131,10 +194,7 @@ export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
       >
         {/* Header */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <ArrowLeft size={iconSizes.lg} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Meus Documentos</Text>
@@ -153,7 +213,7 @@ export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
           </View>
           <View style={[styles.statItem, { backgroundColor: colors.warningBg }]}>
             <Text style={[styles.statValue, { color: colors.warning }]}>{stats.pending}</Text>
-            <Text style={styles.statLabel}>Em Analise</Text>
+            <Text style={styles.statLabel}>Em Análise</Text>
           </View>
           <View style={[styles.statItem, { backgroundColor: colors.errorBg }]}>
             <Text style={[styles.statValue, { color: colors.error }]}>{stats.rejected}</Text>
@@ -169,21 +229,21 @@ export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
             size="lg"
             fullWidth
             icon={<Upload size={iconSizes.md} color={colors.text} />}
-            loading={isLoading}
+            loading={isUploading}
             onPress={handleUpload}
           />
         </Animated.View>
 
-        {/* Categories */}
+        {/* Category filter */}
         <Animated.View entering={FadeInUp.delay(400).duration(400)}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoriesContainer}
           >
-            {categories.map((cat) => (
+            {CATEGORY_FILTERS.map((cat) => (
               <TouchableOpacity
-                key={cat.key || 'all'}
+                key={cat.key ?? 'all'}
                 style={[
                   styles.categoryChip,
                   selectedCategory === cat.key && styles.categoryChipActive,
@@ -203,50 +263,65 @@ export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
           </ScrollView>
         </Animated.View>
 
-        {/* Documents List */}
+        {/* Documents list */}
         <Animated.View entering={FadeInUp.delay(500).duration(400)} style={styles.documentsSection}>
           <Text style={styles.sectionTitle}>
-            {selectedCategory ? `Documentos - ${selectedCategory}` : 'Todos os Documentos'}
+            {selectedCategory ? `Documentos — ${typeLabel(selectedCategory)}` : 'Todos os Documentos'}
           </Text>
 
-          {filteredDocuments.length > 0 ? (
-            filteredDocuments.map((doc, index) => (
+          {isLoading ? (
+            <ActivityIndicator
+              size="large"
+              color={colors.primary}
+              style={{ marginTop: spacing.xl }}
+            />
+          ) : filtered.length > 0 ? (
+            filtered.map((doc) => (
               <Card key={doc.id} style={styles.documentCard}>
                 <View style={styles.documentHeader}>
+                  {/* Type icon */}
                   <View style={styles.documentIcon}>
-                    {getTypeIcon(doc.type)}
+                    <FileText size={iconSizes.xl} color={colors.primary} />
                   </View>
+
+                  {/* Info */}
                   <View style={styles.documentInfo}>
-                    <Text style={styles.documentName}>{doc.name}</Text>
+                    <Text style={styles.documentName}>{typeLabel(doc.type)}</Text>
+                    {/* createdAt vem do backend — formata para exibição */}
                     <Text style={styles.documentMeta}>
-                      Enviado em {doc.uploadDate} | {doc.size}
+                      Enviado em {formatDate(doc.createdAt?.split('T')[0])}
+                    </Text>
+                    {doc.vehicleId && (
+                      <Text style={styles.documentMeta}>Veículo: {doc.vehicleId}</Text>
+                    )}
+                  </View>
+
+                  {/* Status badge */}
+                  <View style={[styles.statusBadge, { backgroundColor: statusColor(doc.status) + '22' }]}>
+                    <StatusIcon status={doc.status} />
+                    <Text style={[styles.statusBadgeText, { color: statusColor(doc.status) }]}>
+                      {statusLabel(doc.status)}
                     </Text>
                   </View>
-                  <StatusBadge status={doc.status} size="sm" />
                 </View>
 
-                {doc.expiryDate && doc.status === 'approved' && (
+                {/* Validade — só mostra se aprovado e preenchido */}
+                {doc.validade && doc.status === 'APPROVED' && (
                   <View style={styles.expiryRow}>
                     <Text style={styles.expiryLabel}>Validade:</Text>
-                    <Text style={styles.expiryValue}>{doc.expiryDate}</Text>
+                    <Text style={styles.expiryValue}>{formatDate(doc.validade)}</Text>
                   </View>
                 )}
 
-                <View style={styles.documentActions}>
-                  <TouchableOpacity style={styles.documentAction}>
-                    <Download size={iconSizes.sm} color={colors.primary} />
-                    <Text style={styles.documentActionText}>Baixar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.documentAction}
-                    onPress={() => handleDelete(doc)}
-                  >
-                    <Trash2 size={iconSizes.sm} color={colors.error} />
-                    <Text style={[styles.documentActionText, { color: colors.error }]}>
-                      Excluir
+                {/* Rejected reason hint */}
+                {doc.status === 'REJECTED' && (
+                  <View style={styles.rejectedRow}>
+                    <AlertCircle size={iconSizes.sm} color={colors.error} />
+                    <Text style={styles.rejectedText}>
+                      Documento rejeitado. Envie uma nova versão.
                     </Text>
-                  </TouchableOpacity>
-                </View>
+                  </View>
+                )}
               </Card>
             ))
           ) : (
@@ -255,8 +330,8 @@ export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
               <Text style={styles.emptyStateTitle}>Nenhum documento encontrado</Text>
               <Text style={styles.emptyStateText}>
                 {selectedCategory
-                  ? `Nenhum documento do tipo ${selectedCategory} foi encontrado`
-                  : 'Envie seus documentos para comecar'}
+                  ? `Nenhum documento do tipo ${typeLabel(selectedCategory)} foi encontrado`
+                  : 'Envie seus documentos para começar'}
               </Text>
             </View>
           )}
@@ -268,17 +343,15 @@ export function DocumentsScreen({ navigation }: DocumentsScreenProps) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-  },
+  container:      { flex: 1, backgroundColor: colors.background },
+  scrollView:     { flex: 1 },
+  scrollContent:  { paddingHorizontal: spacing.lg },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -286,23 +359,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 44, height: 44,
     borderRadius: borderRadius.lg,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border,
+    justifyContent: 'center', alignItems: 'center',
   },
   headerTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
     color: colors.text,
   },
-  headerSpacer: {
-    width: 44,
-  },
+  headerSpacer: { width: 44 },
+
   statsContainer: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -327,9 +396,9 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     color: colors.textSecondary,
   },
-  uploadSection: {
-    marginBottom: spacing.xl,
-  },
+
+  uploadSection: { marginBottom: spacing.xl },
+
   categoriesContainer: {
     gap: spacing.sm,
     paddingVertical: spacing.sm,
@@ -340,22 +409,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: borderRadius.full,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1, borderColor: colors.border,
     marginRight: spacing.sm,
   },
-  categoryChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  categoryChipText: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    fontWeight: typography.weights.medium,
-  },
-  categoryChipTextActive: {
-    color: colors.text,
-  },
+  categoryChipActive:     { backgroundColor: colors.primary, borderColor: colors.primary },
+  categoryChipText:       { fontSize: typography.sizes.sm, color: colors.textSecondary, fontWeight: typography.weights.medium },
+  categoryChipTextActive: { color: colors.text },
+
   documentsSection: {},
   sectionTitle: {
     fontSize: typography.sizes.lg,
@@ -363,35 +423,38 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.md,
   },
-  documentCard: {
-    marginBottom: spacing.md,
-  },
-  documentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+
+  documentCard:   { marginBottom: spacing.md },
+  documentHeader: { flexDirection: 'row', alignItems: 'center' },
   documentIcon: {
-    width: 48,
-    height: 48,
+    width: 48, height: 48,
     borderRadius: borderRadius.lg,
     backgroundColor: colors.infoBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
     marginRight: spacing.md,
   },
-  documentInfo: {
-    flex: 1,
-  },
+  documentInfo:  { flex: 1 },
   documentName: {
     fontSize: typography.sizes.md,
     fontWeight: typography.weights.semibold,
     color: colors.text,
     marginBottom: spacing.xs,
   },
-  documentMeta: {
-    fontSize: typography.sizes.xs,
-    color: colors.textMuted,
+  documentMeta: { fontSize: typography.sizes.xs, color: colors.textMuted },
+
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
   },
+  statusBadgeText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+  },
+
   expiryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -400,41 +463,26 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  expiryLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginRight: spacing.sm,
-  },
-  expiryValue: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.text,
-  },
-  documentActions: {
+  expiryLabel: { fontSize: typography.sizes.sm, color: colors.textSecondary, marginRight: spacing.sm },
+  expiryValue: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.text },
+
+  rejectedRow: {
     flexDirection: 'row',
-    gap: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  documentAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  documentActionText: {
-    fontSize: typography.sizes.sm,
-    color: colors.primary,
-    fontWeight: typography.weights.medium,
-  },
+  rejectedText: { fontSize: typography.sizes.sm, color: colors.error, flex: 1 },
+
   emptyState: {
     alignItems: 'center',
     paddingVertical: spacing.huge,
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1, borderColor: colors.border,
   },
   emptyStateTitle: {
     fontSize: typography.sizes.lg,
@@ -449,7 +497,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 280,
   },
-  bottomSpacing: {
-    height: spacing.xxxl,
-  },
+
+  bottomSpacing: { height: spacing.xxxl },
 });

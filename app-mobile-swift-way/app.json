@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0A1929"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.swiftway.mobile",
@@ -50,7 +52,8 @@
         {
           "cameraPermission": "Permitir que SWIFT WAY acesse sua câmera para digitalizar documentos."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

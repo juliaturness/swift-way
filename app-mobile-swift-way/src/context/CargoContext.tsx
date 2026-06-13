@@ -1,45 +1,94 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { offerApi, OfferResponse } from '../lib/api';
-import { CargoOffer, Trip, Document, Notification, Settings } from '../types';
+import { cargoApi, offerApi, CargoResponse, OfferResponse } from '../lib/api';
+import {
+  CargoOffer, CargoResponse as CargoResponseType, Trip, TripCargo,
+  TripStatus, Document, Notification, Settings,
+} from '../types';
 
-const SETTINGS_KEY      = '@vapt_vupt:settings';
-const NOTIFICATIONS_KEY = '@vapt_vupt:notifications';
+const SETTINGS_KEY      = '@swiftway:settings';
+const NOTIFICATIONS_KEY = '@swiftway:notifications';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers: converte OfferResponse (backend) → CargoOffer (frontend)
+// Converters — traduz DTOs do backend para os tipos do frontend
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * OfferResponse (GET /offers) → CargoOffer
+ * O id da oferta fica em CargoOffer.id (usado em accept/decline).
+ */
 function offerToCargoOffer(o: OfferResponse): CargoOffer {
   const c = o.cargo;
   return {
-    id: o.id as unknown as number, // CargoOffer.id é number; aqui guardamos o UUID como cast
+    id:               o.id,
+    cargoId:          o.cargoId,
     origin:           c ? `${c.origemCidade}, ${c.origemEstado}` : '—',
-    originCity:       c?.origemCidade  ?? '—',
-    originState:      c?.origemEstado  ?? '—',
+    originCity:       c?.origemCidade   ?? '—',
+    originState:      c?.origemEstado   ?? '—',
     destination:      c ? `${c.destinoCidade}, ${c.destinoEstado}` : '—',
-    destinationCity:  c?.destinoCidade ?? '—',
-    destinationState: c?.destinoEstado ?? '—',
-    weight:           c ? `${c.pesoKg} kg` : '—',
-    vehicleType:      c?.tipo ?? '—',
-    status:           'pending',
+    destinationCity:  c?.destinoCidade  ?? '—',
+    destinationState: c?.destinoEstado  ?? '—',
+    weight:           c?.pesoKg         ?? 0,
+    vehicleType:      c?.tipo           ?? '—',
+    tipo:             (c?.tipo          ?? 'OUTROS') as CargoOffer['tipo'],
     pickupDate:       c?.dataColetaLimite
       ? new Date(c.dataColetaLimite).toLocaleDateString('pt-BR')
       : '—',
-    deliveryDate: c?.dataEntregaPrevista
+    deliveryDate:     c?.dataEntregaPrevista
       ? new Date(c.dataEntregaPrevista).toLocaleDateString('pt-BR')
       : undefined,
-    priority:    'medium',
-    price:       c ? `R$ ${c.valorCarga.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—',
-    distance:    `${o.distanciaKm.toFixed(0)} km`,
-    description: c?.descricao,
-    carrier:     c?.carrier?.razaoSocial ?? c?.carrier?.nomeFantasia ?? '—',
-    carrierId:   c?.carrier?.id ?? '—',
-    matchScore:  Math.round(o.matchScore),
-    // guarda o UUID original para usar nas chamadas accept/decline
-    _offerId:    o.id,
-  } as CargoOffer & { _offerId: string };
+    price:            c?.valorCarga
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.valorCarga)
+      : 'R$ 0,00',
+    distance:         String(o.distanciaKm ?? 0),
+    matchScore:       Math.round(o.matchScore),
+    status:           o.status,
+    expiresAt:        o.expiraEm,
+    carrier:          c?.carrier?.nomeFantasia ?? c?.carrier?.razaoSocial ?? '—',
+    carrierId:        c?.carrier?.id           ?? '—',
+    description:      c?.descricao,
+  };
 }
+
+/**
+ * OfferResponse aceita → Trip
+ * O backend não tem endpoint de trips separado ainda,
+ * então construímos a trip a partir da oferta aceita.
+ */
+function acceptedOfferToTrip(o: OfferResponse): Trip {
+  const c = o.cargo;
+  const cargo: TripCargo = {
+    id:          o.cargoId,
+    origin:      { city: c?.origemCidade ?? '—', state: c?.origemEstado ?? '—' },
+    destination: { city: c?.destinoCidade ?? '—', state: c?.destinoEstado ?? '—' },
+    weight:      c?.pesoKg     ?? 0,
+    price:       c?.valorCarga ?? 0,
+    distance:    o.distanciaKm ?? 0,
+    pickupDate:  c?.dataColetaLimite ? new Date(c.dataColetaLimite) : new Date(),
+    tipo:        (c?.tipo ?? 'OUTROS') as TripCargo['tipo'],
+  };
+
+  return {
+    id:        o.id,        // offerId — serve como tripId
+    status:    'accepted',
+    cargo,
+    startDate: new Date(),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mapeamento de status backend → frontend (para trips vindas do PATCH /status)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CARGO_STATUS_MAP: Record<string, TripStatus> = {
+  AGUARDANDO:        'pending',
+  MATCHING:          'pending',
+  OFERTA_ENVIADA:    'pending',
+  MOTORISTA_ALOCADO: 'accepted',
+  EM_TRANSITO:       'in_transit',
+  ENTREGUE:          'delivered',
+  CANCELADO:         'cancelled',
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Defaults
@@ -72,21 +121,29 @@ interface CargoContextType {
   isLoading:     boolean;
   hasMoreOffers: boolean;
 
-  acceptOffer:  (offerId: number | string) => Promise<boolean>;
-  declineOffer: (offerId: number | string, motivo?: string) => Promise<boolean>;
-  refreshOffers: () => Promise<void>;
+  // Ofertas
+  acceptOffer:    (offerId: string) => Promise<boolean>;
+  declineOffer:   (offerId: string, motivo?: string) => Promise<boolean>;
+  refreshOffers:  () => Promise<void>;
   loadMoreOffers: () => Promise<void>;
 
-  updateTripProgress: (tripId: number, progress: number) => void;
-  completeTrip:       (tripId: number) => Promise<boolean>;
+  // Viagens
+  refreshTrips:     () => Promise<void>;
+  updateTripStatus: (tripId: string, status: TripStatus) => Promise<void>;
 
+  // Cargo por ID (para tela de detalhes)
+  getCargoById: (id: string) => Promise<CargoResponseType | null>;
+
+  // Documentos
   uploadDocument: (doc: Partial<Document>) => Promise<boolean>;
-  deleteDocument: (docId: string)          => Promise<boolean>;
+  deleteDocument: (docId: string) => Promise<boolean>;
 
-  markNotificationRead:    (id: string) => void;
-  markAllNotificationsRead: ()          => void;
-  clearNotifications:       ()          => void;
+  // Notificações
+  markNotificationRead:     (id: string) => void;
+  markAllNotificationsRead: () => void;
+  clearNotifications:       () => void;
 
+  // Configurações
   updateSettings: (s: Partial<Settings>) => Promise<void>;
 }
 
@@ -106,175 +163,182 @@ export function CargoProvider({ children }: { children: ReactNode }) {
   const [currentPage,   setCurrentPage]   = useState(0);
   const [hasMoreOffers, setHasMoreOffers] = useState(true);
 
-  // mapa de offerId (UUID) para cada CargoOffer — necessário para accept/decline
-  const [offerIdMap, setOfferIdMap] = useState<Map<string, string>>(new Map());
-
   useEffect(() => {
     loadSavedData();
     fetchOffers(0, true);
   }, []);
 
+  // ── Dados locais ──────────────────────────────────────────────────────────
+
   const loadSavedData = async () => {
     try {
-      const savedSettings = await AsyncStorage.getItem(SETTINGS_KEY);
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
-
-      const savedNotifications = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-      if (savedNotifications) setNotifications(JSON.parse(savedNotifications));
+      const [rawSettings, rawNotifications] = await Promise.all([
+        AsyncStorage.getItem(SETTINGS_KEY),
+        AsyncStorage.getItem(NOTIFICATIONS_KEY),
+      ]);
+      if (rawSettings)      setSettings(JSON.parse(rawSettings));
+      if (rawNotifications) setNotifications(JSON.parse(rawNotifications));
     } catch (e) {
-      console.error('Erro ao carregar dados locais:', e);
+      console.error('[CargoContext] loadSavedData error:', e);
     }
   };
 
-  // ── Busca de ofertas ─────────────────────────────────────────────────────
+  // ── Notificações internas ─────────────────────────────────────────────────
+
+  const pushNotification = useCallback((
+    type: Notification['type'],
+    title: string,
+    message: string,
+  ) => {
+    const newNotif: Notification = {
+      id:        String(Date.now()),
+      type, title, message,
+      read:      false,
+      createdAt: new Date().toISOString(),
+    };
+    setNotifications(prev => {
+      const updated = [newNotif, ...prev];
+      // persiste assincronamente sem bloquear o render
+      AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updated)).catch(console.warn);
+      return updated;
+    });
+  }, []);
+
+  // ── Ofertas ───────────────────────────────────────────────────────────────
 
   const fetchOffers = useCallback(async (page: number, reset = false) => {
     try {
       setIsLoading(true);
-      const res = await offerApi.listMyOffers(page, 20);
-
-      const newOffers = res.content.map(offerToCargoOffer);
-
-      // atualiza o mapa uuid → id numérico (usamos o índice como fallback)
-      setOfferIdMap(prev => {
-        const next = new Map(prev);
-        res.content.forEach(o => {
-          next.set(String((offerToCargoOffer(o) as any)._offerId ?? o.id), o.id);
-        });
-        return next;
-      });
-
-      setOffers(prev => reset ? newOffers : [...prev, ...newOffers]);
+      const res  = await offerApi.listMyOffers(page, 20);
+      const next = res.content.map(offerToCargoOffer);
+      setOffers(prev => reset ? next : [...prev, ...next]);
       setCurrentPage(page);
       setHasMoreOffers(!res.last);
     } catch (e) {
-      console.error('Erro ao buscar ofertas:', e);
+      console.error('[CargoContext] fetchOffers error:', e);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const refreshOffers  = useCallback(() => fetchOffers(0, true), [fetchOffers]);
-  const loadMoreOffers = useCallback(() => {
+  const refreshOffers = useCallback(() => fetchOffers(0, true), [fetchOffers]);
+
+  const loadMoreOffers = useCallback((): Promise<void> => {
     if (!isLoading && hasMoreOffers) return fetchOffers(currentPage + 1);
     return Promise.resolve();
   }, [isLoading, hasMoreOffers, currentPage, fetchOffers]);
 
-  // Resolve o UUID real da oferta a partir do id numérico ou UUID direto
-  const resolveOfferId = (offerId: number | string): string => {
-    const key = String(offerId);
-    return offerIdMap.get(key) ?? key;
-  };
+  // ── Accept ────────────────────────────────────────────────────────────────
 
-  // ── Accept ───────────────────────────────────────────────────────────────
-
-  const acceptOffer = async (offerId: number | string): Promise<boolean> => {
+  const acceptOffer = async (offerId: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const uuid = resolveOfferId(offerId);
-      const accepted = await offerApi.accept(uuid);
+      const accepted = await offerApi.accept(offerId);
 
-      // remove da lista de ofertas
-      setOffers(prev => prev.filter(o => String((o as any)._offerId ?? o.id) !== uuid));
+      // Remove da lista de ofertas
+      setOffers(prev => prev.filter(o => o.id !== offerId));
 
-      // cria viagem local a partir dos dados retornados
-      if (accepted.cargo) {
-        const c = accepted.cargo;
-        const newTrip: Trip = {
-          id:        Date.now(),
-          origin:    `${c.origemCidade}, ${c.origemEstado}`,
-          destination: `${c.destinoCidade}, ${c.destinoEstado}`,
-          status:    'scheduled',
-          cargo:     `Carga #${c.id}`,
-          cargoId:   0,
-          carrier:   c.carrier?.razaoSocial ?? '—',
-          carrierId: c.carrier?.id ?? '—',
-          startDate: new Date(c.dataColetaLimite).toLocaleDateString('pt-BR'),
-          payment:   `R$ ${c.valorCarga.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        };
-        setTrips(prev => [newTrip, ...prev]);
-      }
+      // Cria a trip a partir da oferta aceita
+      const newTrip = acceptedOfferToTrip(accepted);
+      setTrips(prev => [newTrip, ...prev]);
 
-      pushNotification('status', 'Oferta Aceita',
-        `Você aceitou a oferta. A viagem foi agendada.`);
-
-      return true;
-    } catch (e: any) {
-      console.error('Erro ao aceitar oferta:', e);
-      pushNotification('system', 'Erro', e?.message ?? 'Não foi possível aceitar a oferta.');
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ── Decline ──────────────────────────────────────────────────────────────
-
-  const declineOffer = async (offerId: number | string, motivo?: string): Promise<boolean> => {
-    try {
-      setIsLoading(true);
-      const uuid = resolveOfferId(offerId);
-      await offerApi.decline(uuid, motivo ? { motivoRecusa: motivo } : undefined);
-
-      setOffers(prev => prev.filter(o => String((o as any)._offerId ?? o.id) !== uuid));
-      return true;
-    } catch (e: any) {
-      console.error('Erro ao recusar oferta:', e);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ── Trips ────────────────────────────────────────────────────────────────
-
-  const activeTrip = trips.find(t => t.status === 'in_progress') ?? null;
-
-  const updateTripProgress = (tripId: number, progress: number) => {
-    setTrips(prev =>
-      prev.map(t => t.id === tripId ? { ...t, progress: Math.min(100, progress) } : t)
-    );
-  };
-
-  const completeTrip = async (tripId: number): Promise<boolean> => {
-    try {
-      setIsLoading(true);
-      setTrips(prev =>
-        prev.map(t =>
-          t.id === tripId
-            ? { ...t, status: 'completed', progress: 100, endDate: new Date().toLocaleDateString('pt-BR') }
-            : t
-        )
+      pushNotification(
+        'status',
+        'Oferta Aceita!',
+        `Viagem de ${newTrip.cargo.origin.city} → ${newTrip.cargo.destination.city} agendada.`,
       );
-      pushNotification('status', 'Viagem Concluída',
-        `Parabéns! A viagem #${tripId} foi concluída com sucesso.`);
+      return true;
+    } catch (e: any) {
+      console.error('[CargoContext] acceptOffer error:', e);
+      pushNotification('system', 'Erro ao aceitar', e?.message ?? 'Tente novamente.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Decline ───────────────────────────────────────────────────────────────
+
+  const declineOffer = async (offerId: string, motivo?: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      await offerApi.decline(offerId, motivo ? { motivoRecusa: motivo } : undefined);
+      setOffers(prev => prev.filter(o => o.id !== offerId));
       return true;
     } catch (e) {
+      console.error('[CargoContext] declineOffer error:', e);
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── Documents ────────────────────────────────────────────────────────────
+  // ── Trips ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Por enquanto o backend não expõe GET /trips para o motorista.
+   * As trips são geradas localmente a partir das ofertas aceitas.
+   * Quando o endpoint existir, substituir aqui.
+   */
+  const refreshTrips = useCallback(async () => {
+    // TODO: implementar GET /trips quando o endpoint existir
+    // Por ora apenas re-busca as ofertas aceitas pendentes
+    await fetchOffers(0, true);
+  }, [fetchOffers]);
+
+  /**
+   * Atualiza o status de uma trip localmente.
+   * Quando o backend tiver PATCH /trips/{id}/status, chamar aqui.
+   */
+  const updateTripStatus = async (tripId: string, status: TripStatus): Promise<void> => {
+    setTrips(prev => prev.map(t => {
+      if (t.id !== tripId) return t;
+      const updates: Partial<Trip> = { status };
+      if (status === 'in_transit') updates.startDate = new Date();
+      if (status === 'delivered' || status === 'completed') updates.endDate = new Date();
+      return { ...t, ...updates };
+    }));
+
+    // Notifica o motorista sobre a mudança de status
+    const statusLabels: Partial<Record<TripStatus, string>> = {
+      in_transit: 'Viagem iniciada — boa viagem!',
+      unloading:  'Aguardando descarregamento.',
+      delivered:  'Entrega concluída com sucesso!',
+      completed:  'Viagem encerrada.',
+    };
+    const msg = statusLabels[status];
+    if (msg) pushNotification('status', 'Status atualizado', msg);
+  };
+
+  // ── Cargo por ID ──────────────────────────────────────────────────────────
+
+  const getCargoById = async (id: string): Promise<CargoResponseType | null> => {
+    try {
+      return await cargoApi.getById(id);
+    } catch (e) {
+      console.error('[CargoContext] getCargoById error:', e);
+      return null;
+    }
+  };
+
+  // ── Documentos ────────────────────────────────────────────────────────────
 
   const uploadDocument = async (doc: Partial<Document>): Promise<boolean> => {
     try {
       setIsLoading(true);
-      // TODO: substituir por chamada real quando o endpoint de documentos existir
+      // TODO: chamar endpoint de documentos quando disponível no backend
       await new Promise(r => setTimeout(r, 1500));
       const newDoc: Document = {
         id:         String(Date.now()),
-        name:       doc.name ?? 'Documento',
-        type:       doc.type ?? 'OTHER',
+        name:       doc.name       ?? 'Documento',
+        type:       doc.type       ?? 'OTHER',
         status:     'pending',
         uploadDate: new Date().toLocaleDateString('pt-BR'),
         expiryDate: doc.expiryDate,
-        size:       '1.5 MB',
+        size:       '—',
       };
       setDocuments(prev => [newDoc, ...prev]);
-      pushNotification('document', 'Documento Enviado',
-        `"${newDoc.name}" foi enviado e está em análise.`);
+      pushNotification('document', 'Documento enviado', `"${newDoc.name}" está em análise.`);
       return true;
     } catch {
       return false;
@@ -286,7 +350,7 @@ export function CargoProvider({ children }: { children: ReactNode }) {
   const deleteDocument = async (docId: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      // TODO: substituir por chamada real quando o endpoint existir
+      // TODO: chamar DELETE /documents/{id} quando disponível
       await new Promise(r => setTimeout(r, 500));
       setDocuments(prev => prev.filter(d => d.id !== docId));
       return true;
@@ -297,25 +361,9 @@ export function CargoProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── Notifications ────────────────────────────────────────────────────────
+  // ── Notificações ──────────────────────────────────────────────────────────
 
-  const pushNotification = (
-    type: Notification['type'],
-    title: string,
-    message: string,
-  ) => {
-    const n: Notification = {
-      id:        String(Date.now()),
-      type,
-      title,
-      message,
-      read:      false,
-      createdAt: new Date().toISOString(),
-    };
-    setNotifications(prev => [n, ...prev]);
-  };
-
-  const markNotificationRead    = (id: string) =>
+  const markNotificationRead = (id: string) =>
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
 
   const markAllNotificationsRead = () =>
@@ -323,13 +371,19 @@ export function CargoProvider({ children }: { children: ReactNode }) {
 
   const clearNotifications = () => setNotifications([]);
 
-  // ── Settings ─────────────────────────────────────────────────────────────
+  // ── Configurações ─────────────────────────────────────────────────────────
 
   const updateSettings = async (newSettings: Partial<Settings>) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   };
+
+  // ── Derived state ─────────────────────────────────────────────────────────
+
+  const activeTrip = trips.find(t =>
+    ['accepted', 'in_transit', 'loading', 'unloading'].includes(t.status)
+  ) ?? null;
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -338,7 +392,8 @@ export function CargoProvider({ children }: { children: ReactNode }) {
       offers, trips, documents, notifications, settings,
       activeTrip, isLoading, hasMoreOffers,
       acceptOffer, declineOffer, refreshOffers, loadMoreOffers,
-      updateTripProgress, completeTrip,
+      refreshTrips, updateTripStatus,
+      getCargoById,
       uploadDocument, deleteDocument,
       markNotificationRead, markAllNotificationsRead, clearNotifications,
       updateSettings,
@@ -349,7 +404,7 @@ export function CargoProvider({ children }: { children: ReactNode }) {
 }
 
 export function useCargo() {
-  const context = useContext(CargoContext);
-  if (!context) throw new Error('useCargo must be used within a CargoProvider');
-  return context;
+  const ctx = useContext(CargoContext);
+  if (!ctx) throw new Error('useCargo must be used within a CargoProvider');
+  return ctx;
 }

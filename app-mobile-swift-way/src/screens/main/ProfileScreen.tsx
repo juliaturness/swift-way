@@ -37,74 +37,104 @@ export function ProfileScreen() {
   const { documents, trips } = useCargo();
   const user = authState.user;
 
+  // ── helpers ────────────────────────────────────────────────────────────────
+
+  /**
+   * Deriva um status de UI a partir de user.available.
+   * O backend só conhece available=true/false — não existe "busy".
+   */
+  const uiStatus: 'available' | 'offline' =
+    user?.available ? 'available' : 'offline';
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'available': return colors.success;
+      case 'busy':      return colors.warning;
+      default:          return colors.textMuted;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'available': return 'Disponível';
+      case 'busy':      return 'Ocupado';
+      default:          return 'Offline';
+    }
+  };
+
+  // ── handlers ───────────────────────────────────────────────────────────────
+
   const handleLogout = () => {
     Alert.alert(
       'Sair da conta',
       'Deseja realmente sair da sua conta?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ]
+        { text: 'Sair', style: 'destructive', onPress: async () => { await logout(); } },
+      ],
     );
   };
 
   const handleStatusChange = (newStatus: 'available' | 'busy' | 'offline') => {
     Alert.alert(
       'Alterar Status',
-      `Deseja alterar seu status para "${newStatus === 'available' ? 'Disponivel' : newStatus === 'busy' ? 'Ocupado' : 'Offline'}"?`,
+      `Deseja alterar seu status para "${getStatusLabel(newStatus)}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          onPress: async () => {
-            await updateStatus(newStatus);
-          },
-        },
-      ]
+        { text: 'Confirmar', onPress: async () => { await updateStatus(newStatus); } },
+      ],
     );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return colors.success;
-      case 'busy':
-        return colors.warning;
-      default:
-        return colors.textMuted;
-    }
-  };
+  // ── derived data ───────────────────────────────────────────────────────────
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'Disponivel';
-      case 'busy':
-        return 'Ocupado';
-      default:
-        return 'Offline';
-    }
-  };
-
+  /**
+   * Stats que o backend expõe em DriverResponse.
+   * totalTrips, approvalRate e monthlyEarnings não existem — omitir ou
+   * buscar de outro endpoint. Por ora exibimos o que temos.
+   */
   const stats = [
-    { label: 'Viagens', value: user?.totalTrips || 0, icon: Truck },
-    { label: 'Avaliacao', value: `${user?.rating || 0}`, icon: Star },
-    { label: 'Aprovacao', value: `${user?.approvalRate || 0}%`, icon: CheckCircle },
-    { label: 'Ganhos/Mes', value: `R$ ${((user?.monthlyEarnings || 0) / 1000).toFixed(1)}k`, icon: TrendingUp },
+    {
+      label: 'Viagens',
+      // Backend não retorna totalTrips em DriverResponse — use trips locais como proxy
+      value: trips?.length ?? 0,
+      icon: Truck,
+    },
+    {
+      label: 'Avaliação',
+      value: user?.averageRating != null ? user.averageRating.toFixed(1) : '—',
+      icon: Star,
+    },
+    {
+      label: 'GR Aprovado',
+      value: user?.grApproved ? 'Sim' : 'Não',
+      icon: CheckCircle,
+    },
+    {
+      label: 'Veículos',
+      value: user?.vehicles?.length ?? 0,
+      icon: TrendingUp,
+    },
   ];
 
   const menuItems = [
-    { icon: User, label: 'Dados Pessoais', onPress: () => {} },
-    { icon: FileText, label: 'Meus Documentos', count: documents.filter(d => d.status === 'pending').length, onPress: () => {} },
-    { icon: Truck, label: 'Meus Veiculos', count: user?.vehicles?.length || 0, onPress: () => {} },
-    { icon: MapPin, label: 'Enderecos', onPress: () => {} },
+    { icon: User,     label: 'Dados Pessoais',  onPress: () => {} },
+    {
+      icon: FileText,
+      label: 'Meus Documentos',
+      count: documents.filter(d => d.status === 'pending').length,
+      onPress: () => {},
+    },
+    {
+      icon: Truck,
+      label: 'Meus Veículos',
+      count: user?.vehicles?.length ?? 0,
+      onPress: () => {},
+    },
+    { icon: MapPin, label: 'Endereços', onPress: () => {} },
   ];
+
+  // ── render ─────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -136,29 +166,30 @@ export function ProfileScreen() {
             <TouchableOpacity style={styles.cameraButton}>
               <Camera size={iconSizes.sm} color={colors.text} />
             </TouchableOpacity>
-            <View style={[styles.statusDot, { backgroundColor: getStatusColor(user?.status || 'offline') }]} />
+            <View style={[styles.statusDot, { backgroundColor: getStatusColor(uiStatus) }]} />
           </View>
 
-          <Text style={styles.userName}>{user?.name}</Text>
+          {/* fullName (backend) — fallback para email se ainda não carregou */}
+          <Text style={styles.userName}>{user?.fullName ?? user?.email}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
 
-          {/* Status Selector */}
+          {/* Status Selector — 'busy' é UI-only; não há equivalente no backend */}
           <View style={styles.statusSelector}>
-            {['available', 'busy', 'offline'].map((status) => (
+            {(['available', 'busy', 'offline'] as const).map((status) => (
               <TouchableOpacity
                 key={status}
                 style={[
                   styles.statusOption,
-                  user?.status === status && styles.statusOptionActive,
-                  user?.status === status && { borderColor: getStatusColor(status) },
+                  uiStatus === status && styles.statusOptionActive,
+                  uiStatus === status && { borderColor: getStatusColor(status) },
                 ]}
-                onPress={() => handleStatusChange(status as any)}
+                onPress={() => handleStatusChange(status)}
               >
                 <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(status) }]} />
                 <Text
                   style={[
                     styles.statusOptionText,
-                    user?.status === status && { color: getStatusColor(status) },
+                    uiStatus === status && { color: getStatusColor(status) },
                   ]}
                 >
                   {getStatusLabel(status)}
@@ -184,7 +215,7 @@ export function ProfileScreen() {
         {/* Driver Info */}
         <Animated.View entering={FadeInUp.delay(400).duration(400)}>
           <Card style={styles.card}>
-            <Text style={styles.cardTitle}>Informacoes do Motorista</Text>
+            <Text style={styles.cardTitle}>Informações do Motorista</Text>
             <CardContent>
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
@@ -192,25 +223,39 @@ export function ProfileScreen() {
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>CNH</Text>
-                  <Text style={styles.infoValue}>{user?.cnhNumber} - Categoria {user?.cnhCategory}</Text>
+                  {/* cnhNumber e cnhCategory vêm direto do DriverResponse */}
+                  <Text style={styles.infoValue}>
+                    {user?.cnhNumber ?? '—'} — Categoria {user?.cnhCategory ?? '—'}
+                  </Text>
                 </View>
               </View>
+
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <Phone size={iconSizes.md} color={colors.primary} />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Telefone</Text>
-                  <Text style={styles.infoValue}>{user?.phone}</Text>
+                  {/* phone vem do DriverResponse */}
+                  <Text style={styles.infoValue}>{user?.phone ?? '—'}</Text>
                 </View>
               </View>
+
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
                   <MapPin size={iconSizes.md} color={colors.primary} />
                 </View>
                 <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Localizacao</Text>
-                  <Text style={styles.infoValue}>{user?.city}, {user?.state}</Text>
+                  <Text style={styles.infoLabel}>Localização</Text>
+                  {/*
+                    O backend não retorna cidade/estado no DriverResponse.
+                    Exibimos lat/lng se disponíveis, caso contrário indicamos ausência.
+                  */}
+                  <Text style={styles.infoValue}>
+                    {user?.latitude != null && user?.longitude != null
+                      ? `${user.latitude.toFixed(5)}, ${user.longitude.toFixed(5)}`
+                      : 'Não informada'}
+                  </Text>
                 </View>
               </View>
             </CardContent>
@@ -265,16 +310,9 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: spacing.lg },
   headerGradient: {
     paddingVertical: spacing.xl,
     marginHorizontal: -spacing.lg,
@@ -295,194 +333,108 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: spacing.lg,
-  },
+  avatarContainer: { position: 'relative', marginBottom: spacing.lg },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 96, height: 96, borderRadius: 48,
     backgroundColor: colors.infoBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: colors.primary,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, borderColor: colors.primary,
   },
-  avatarImage: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-  },
+  avatarImage: { width: 96, height: 96, borderRadius: 48 },
   cameraButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    position: 'absolute', bottom: 0, right: 0,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.card,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: colors.card,
   },
   statusDot: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: colors.card,
+    position: 'absolute', top: 4, right: 4,
+    width: 16, height: 16, borderRadius: 8,
+    borderWidth: 2, borderColor: colors.card,
   },
   userName: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
-    color: colors.text,
-    marginBottom: spacing.xs,
+    color: colors.text, marginBottom: spacing.xs,
   },
   userEmail: {
     fontSize: typography.sizes.md,
-    color: colors.textSecondary,
-    marginBottom: spacing.lg,
+    color: colors.textSecondary, marginBottom: spacing.lg,
   },
-  statusSelector: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  statusSelector: { flexDirection: 'row', gap: spacing.sm },
   statusOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
     borderRadius: borderRadius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.backgroundSecondary,
   },
-  statusOptionActive: {
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-  },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: spacing.sm,
-  },
+  statusOptionActive: { backgroundColor: 'rgba(59, 130, 246, 0.1)' },
+  statusIndicator: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
   statusOptionText: {
     fontSize: typography.sizes.sm,
     color: colors.textSecondary,
     fontWeight: typography.weights.medium,
   },
   statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: spacing.md, marginBottom: spacing.lg,
   },
   statCard: {
-    flex: 1,
-    minWidth: '45%',
+    flex: 1, minWidth: '45%',
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border,
+    padding: spacing.md, alignItems: 'center',
   },
   statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.lg,
+    width: 40, height: 40, borderRadius: borderRadius.lg,
     backgroundColor: colors.infoBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
     marginBottom: spacing.sm,
   },
   statValue: {
     fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.text,
+    fontWeight: typography.weights.bold, color: colors.text,
   },
-  statLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.textSecondary,
-  },
-  card: {
-    marginBottom: spacing.lg,
-  },
+  statLabel: { fontSize: typography.sizes.xs, color: colors.textSecondary },
+  card: { marginBottom: spacing.lg },
   cardTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.md,
+    color: colors.text, marginBottom: spacing.md,
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
   infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.lg,
+    width: 40, height: 40, borderRadius: borderRadius.lg,
     backgroundColor: colors.infoBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
     marginRight: spacing.md,
   },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.textMuted,
-    marginBottom: 2,
-  },
+  infoContent: { flex: 1 },
+  infoLabel: { fontSize: typography.sizes.xs, color: colors.textMuted, marginBottom: 2 },
   infoValue: {
-    fontSize: typography.sizes.md,
-    color: colors.text,
+    fontSize: typography.sizes.md, color: colors.text,
     fontWeight: typography.weights.medium,
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', paddingVertical: spacing.md,
   },
-  menuItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
   menuItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.lg,
+    width: 40, height: 40, borderRadius: borderRadius.lg,
     backgroundColor: colors.infoBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
     marginRight: spacing.md,
   },
   menuItemLabel: {
-    fontSize: typography.sizes.md,
-    color: colors.text,
+    fontSize: typography.sizes.md, color: colors.text,
     fontWeight: typography.weights.medium,
   },
-  menuItemRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  logoutContainer: {
-    marginTop: spacing.lg,
-  },
-  bottomSpacing: {
-    height: spacing.xxxl,
-  },
+  menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  logoutContainer: { marginTop: spacing.lg },
+  bottomSpacing: { height: spacing.xxxl },
 });

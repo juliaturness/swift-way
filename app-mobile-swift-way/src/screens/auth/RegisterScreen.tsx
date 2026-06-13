@@ -15,23 +15,18 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { colors, typography, spacing, borderRadius, iconSizes } from '../../theme';
-import { RootStackParamList } from '../../types';
+import { RootStackParamList, UserRole } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 
-// definindo como o aplicativo vai navegar entre as telas.
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Register'>;
 };
 
-// dizendo pro sistema os tipos de conta q existem.
-type Role = 'DRIVER' | 'CARRIER';
-
-// lista de todas as informações q o cadastro vai pedir.
 interface FormData {
   email: string;
   password: string;
   confirmPassword: string;
-  role: Role;
+  role: UserRole;
   // DRIVER
   fullName: string;
   phone: string;
@@ -45,7 +40,6 @@ interface FormData {
   nomeFantasia: string;
 }
 
-// lista dos possíveis erros q podem aparecer se faltar preencher algo.
 interface FormErrors {
   email?: string;
   password?: string;
@@ -60,18 +54,19 @@ interface FormErrors {
   razaoSocial?: string;
 }
 
-// rotina principal q desenha a tela de criar uma conta nova.
+// Converte "DD/MM/YYYY" → "YYYY-MM-DD"; retorna undefined se a entrada for inválida
+function toIsoDate(value: string): string | undefined {
+  const parts = value.split('/');
+  if (parts.length !== 3) return undefined;
+  const [d, m, y] = parts;
+  if (!d || !m || !y || y.length !== 4) return undefined;
+  return `${y}-${m}-${d}`;
+}
+
 export function RegisterScreen({ navigation }: RegisterScreenProps) {
-  // pegando as ferramentas de acesso do sistema.
   const { register, state } = useAuth();
-  
-  // caixinha pra guardar em qual etapa do cadastro a tela tá.
-  const [step, setStep] = useState(1); // 1: role + email/senha | 2: dados do perfil
-  
-  // caixinha pra saber se as regras de uso foram aceitas.
+  const [step, setStep] = useState(1);
   const [acceptTerms, setAcceptTerms] = useState(false);
-  
-  // caixinha q guarda todas as informações preenchidas.
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
@@ -87,44 +82,27 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     razaoSocial: '',
     nomeFantasia: '',
   });
-  
-  // caixinha pra guardar os avisos de erro na digitação.
   const [errors, setErrors] = useState<FormErrors>({});
 
-  // atalho pra atualizar uma informação específica q acabou de ser digitada.
   const set = (field: keyof FormData) => (value: string) =>
     setFormData(prev => ({ ...prev, [field]: value }));
 
   // ── validações ─────────────────────────────────────────────────────────────
 
-  // checa se a primeira parte do cadastro foi preenchida direito.
   const validateStep1 = (): boolean => {
     const e: FormErrors = {};
-    
-    // avisa se o e-mail tá vazio ou n tem um formato normal.
     if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email))
       e.email = 'E-mail inválido';
-      
-    // pede uma senha mais longa se a digitada for muito curta.
     if (!formData.password || formData.password.length < 6)
       e.password = 'Senha deve ter pelo menos 6 caracteres';
-      
-    // confere se as duas senhas digitadas são iguais.
     if (formData.password !== formData.confirmPassword)
       e.confirmPassword = 'Senhas não conferem';
-      
-    // salva os problemas encontrados.
     setErrors(e);
-    
-    // diz se tá tudo certo pra continuar pra próxima etapa.
     return Object.keys(e).length === 0;
   };
 
-  // checa se a segunda parte do cadastro tem algum erro.
   const validateStep2 = (): boolean => {
     const e: FormErrors = {};
-    
-    // regras de validação se for uma conta de motorista.
     if (formData.role === 'DRIVER') {
       if (!formData.fullName || formData.fullName.length < 3)
         e.fullName = 'Nome deve ter pelo menos 3 caracteres';
@@ -136,58 +114,49 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
         e.cnhNumber = 'Número da CNH obrigatório';
       if (!formData.cnhCategory)
         e.cnhCategory = 'Categoria CNH obrigatória';
-      if (!formData.cnhValidity)
-        e.cnhValidity = 'Validade CNH obrigatória';
-        
-    // regras de validação se for uma conta de transportadora.
+      if (!formData.cnhValidity || !toIsoDate(formData.cnhValidity))
+        e.cnhValidity = 'Validade CNH inválida';
     } else {
       if (!formData.cnpj || formData.cnpj.replace(/\D/g, '').length !== 14)
         e.cnpj = 'CNPJ inválido';
       if (!formData.razaoSocial)
         e.razaoSocial = 'Razão social obrigatória';
     }
-    
-    // avisa q precisa aceitar as regras pra finalizar.
     if (!acceptTerms) e.confirmPassword = 'Você deve aceitar os termos';
-    
-    // salva os problemas encontrados.
     setErrors(e);
-    
-    // diz se tá tudo certo pra finalmente criar a conta.
     return Object.keys(e).length === 0;
   };
 
   // ── submit ─────────────────────────────────────────────────────────────────
 
-  // o q acontece quando o botão final pra criar a conta é apertado.
   const handleRegister = async () => {
-    // se tiver algum erro na digitação, a ação é interrompida.
     if (!validateStep2()) return;
 
-    // arruma a data de validade pro formato q o servidor entende.
-    // Converte "DD/MM/YYYY" → "YYYY-MM-DD" para o backend
-    const [d, m, y] = formData.cnhValidity.split('/');
-    const cnhValidityIso = formData.cnhValidity ? `${y}-${m}-${d}` : undefined;
+    // Monta o payload como discriminated union — o TypeScript valida os campos obrigatórios por role
+    const success = await register(
+      formData.role === 'DRIVER'
+        ? {
+            email: formData.email,
+            password: formData.password,
+            role: 'DRIVER',
+            fullName: formData.fullName,
+            cpf: formData.cpf,
+            phone: formData.phone,
+            cnhNumber: formData.cnhNumber,
+            cnhCategory: formData.cnhCategory,
+            cnhValidity: toIsoDate(formData.cnhValidity)!,
+          }
+        : {
+            email: formData.email,
+            password: formData.password,
+            role: 'CARRIER',
+            cnpj: formData.cnpj,
+            razaoSocial: formData.razaoSocial,
+            nomeFantasia: formData.nomeFantasia || undefined,
+            telefone: formData.phone,
+          },
+    );
 
-    // manda as informações pra salvar a conta de verdade no sistema.
-    const success = await register({
-      email: formData.email,
-      password: formData.password,
-      role: formData.role,
-      phone: formData.phone,
-      // campos driver
-      fullName: formData.role === 'DRIVER' ? formData.fullName : undefined,
-      cpf: formData.role === 'DRIVER' ? formData.cpf : undefined,
-      cnhNumber: formData.role === 'DRIVER' ? formData.cnhNumber : undefined,
-      cnhCategory: formData.role === 'DRIVER' ? formData.cnhCategory : undefined,
-      cnhValidity: formData.role === 'DRIVER' ? cnhValidityIso : undefined,
-      // campos carrier
-      cnpj: formData.role === 'CARRIER' ? formData.cnpj : undefined,
-      razaoSocial: formData.role === 'CARRIER' ? formData.razaoSocial : undefined,
-      nomeFantasia: formData.role === 'CARRIER' ? formData.nomeFantasia : undefined,
-    });
-
-    // se o servidor avisar q deu algum problema, mostra na tela.
     if (!success) {
       setErrors({ confirmPassword: 'Erro ao criar conta. Verifique os dados e tente novamente.' });
     }
@@ -195,9 +164,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
 
   // ── formatters ─────────────────────────────────────────────────────────────
 
-  // rotinas pra deixar os números bonitinhos automaticamente enquanto a pessoa digita.
-
-  // coloca parênteses e traço no telefone.
   const formatPhone = (text: string) => {
     const c = text.replace(/\D/g, '');
     if (c.length <= 2) return `(${c}`;
@@ -205,7 +171,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     return `(${c.slice(0, 2)}) ${c.slice(2, 7)}-${c.slice(7, 11)}`;
   };
 
-  // coloca os pontos e o traço no cpf.
   const formatCPF = (text: string) => {
     const c = text.replace(/\D/g, '');
     if (c.length <= 3) return c;
@@ -214,7 +179,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     return `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9, 11)}`;
   };
 
-  // coloca os pontos, a barra e o traço no cnpj.
   const formatCNPJ = (text: string) => {
     const c = text.replace(/\D/g, '');
     if (c.length <= 2) return c;
@@ -224,7 +188,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12, 14)}`;
   };
 
-  // coloca as barras pra separar dia, mês e ano na data.
   const formatDate = (text: string) => {
     const c = text.replace(/\D/g, '');
     if (c.length <= 2) return c;
@@ -234,12 +197,8 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
 
   // ── render ─────────────────────────────────────────────────────────────────
 
-  // a parte visual q realmente aparece na tela do celular.
   return (
     <LinearGradient colors={colors.gradientDark} style={styles.container}>
-      {
-        // previne q o teclado esconda os campos q tão sendo digitados.
-      }
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -249,9 +208,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {
-            // topo da tela com o botão de voltar e a barrinha q mostra o progresso do cadastro.
-          }
           <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
@@ -268,9 +224,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
             </View>
           </Animated.View>
 
-          {
-            // quadro principal onde ficam os espaços pra preencher as informações.
-          }
           <Animated.View entering={FadeInUp.delay(200).duration(500)} style={styles.formCard}>
             <Text style={styles.formTitle}>
               {step === 1 ? 'Criar sua conta' : 'Dados do perfil'}
@@ -279,17 +232,11 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
               {step === 1 ? 'Escolha seu perfil e defina o acesso' : 'Preencha suas informações'}
             </Text>
 
-            {
-              // mostra campos diferentes dependendo da etapa do cadastro.
-            }
             {step === 1 ? (
               <View style={styles.form}>
-                {
-                  // botões pra escolher se é motorista ou transportadora.
-                }
                 <Text style={styles.roleLabel}>Tipo de conta</Text>
                 <View style={styles.roleRow}>
-                  {(['DRIVER', 'CARRIER'] as Role[]).map(role => (
+                  {(['DRIVER', 'CARRIER'] as UserRole[]).map(role => (
                     <TouchableOpacity
                       key={role}
                       style={[styles.roleButton, formData.role === role && styles.roleButtonActive]}
@@ -306,9 +253,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                   ))}
                 </View>
 
-                {
-                  // espaços de preencher os dados de acesso da conta.
-                }
                 <Input
                   label="E-mail"
                   placeholder="seu@email.com"
@@ -339,9 +283,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                   icon={<Lock size={iconSizes.md} color={colors.textMuted} />}
                 />
 
-                {
-                  // botão pra ir pra segunda etapa do cadastro.
-                }
                 <Button
                   title="Continuar"
                   variant="primary"
@@ -353,14 +294,8 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
               </View>
             ) : (
               <View style={styles.form}>
-                {
-                  // decide o q mostrar baseado no tipo de perfil escolhido.
-                }
                 {formData.role === 'DRIVER' ? (
                   <>
-                    {
-                      // formulário q aparece só pra motoristas.
-                    }
                     <Input
                       label="Nome completo"
                       placeholder="Seu nome completo"
@@ -417,9 +352,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                   </>
                 ) : (
                   <>
-                    {
-                      // formulário q aparece só pra empresas transportadoras.
-                    }
                     <Input
                       label="CNPJ"
                       placeholder="00.000.000/0000-00"
@@ -456,9 +388,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                   </>
                 )}
 
-                {
-                  // área apertável pra concordar com as regras do sistema.
-                }
                 <TouchableOpacity
                   style={styles.termsRow}
                   onPress={() => setAcceptTerms(!acceptTerms)}
@@ -473,9 +402,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                   </Text>
                 </TouchableOpacity>
 
-                {
-                  // o botão grandão de finalizar pra criar a conta de vez.
-                }
                 <Button
                   title="Criar conta"
                   variant="primary"
@@ -488,18 +414,12 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
               </View>
             )}
 
-            {
-              // uma linha só pra separar e organizar a tela.
-            }
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>ou</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            {
-              // atalho pra ir pra tela de entrar se a pessoa lembrou q já tem conta.
-            }
             <View style={styles.loginSection}>
               <Text style={styles.loginText}>Já tem uma conta?</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -513,7 +433,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
   );
 }
 
-// um dicionário de enfeites q arruma a altura, largura, cor e posição de tudo na tela.
 const styles = StyleSheet.create({
   container: { flex: 1 },
   keyboardView: { flex: 1 },
